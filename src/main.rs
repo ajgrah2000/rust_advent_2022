@@ -19,45 +19,51 @@ struct AdventArgs {
 fn main() {
     let args:AdventArgs = argh::from_env();
 
-    let inputfile = format!("day{}_input.txt",args.day_number);
-    match args.day_number{
-            1 => {day1(inputfile, args.second_part);},
-            2 => {day2(inputfile, args.second_part);},
-            3 => {day3(inputfile, args.second_part);},
-            _ => {println!("Unsupported day {}", args.day_number);}
+    println!("day {}: {}", args.day_number, call_day_func(args.day_number, args.second_part));
+}
+
+fn call_day_func (day_number:u8, second_part:bool) -> u32 {
+    let inputfile = format!("day{}_input.txt", day_number);
+
+    let buf_read = BufReader::new(File::open(inputfile).expect("file not found!"));
+    let lines = buf_read.lines().map(|x| x.unwrap()).collect();
+
+    match day_number{
+            1 => {day1(lines, second_part)},
+            2 => {day2(lines, second_part)},
+            3 => {day3(lines, second_part)},
+            4 => {day4(lines, second_part)},
+            _ => {println!("Unsupported day {}", day_number); 0}
     }
 }
 
-fn day1 (filename:String, second_part:bool) {
-    let buf_read = BufReader::new(File::open(filename).expect("file not found!"));
+fn day1 (lines:Vec<String>, second_part:bool) -> u32 {
 
     let mut calories = Vec::new();
     let mut current = 0;
-    for line in buf_read.lines().map(|x| x.unwrap()) {
+    for line in lines {
         current = match line.as_str(){
             "" => {calories.push(current); 0},
-            _  => {current + line.parse::<i32>().unwrap()}
+            _  => {current + line.parse::<u32>().unwrap()}
         }
     }
     calories.sort();
     calories.reverse();
-    println!("{}", calories[0..= if second_part {2} else {0}].into_iter().fold(0, |sum, x| sum + x));
+    calories[0..= if second_part {2} else {0}].into_iter().fold(0, |sum, x| sum + x)
 }
 
 
-fn day2 (filename:String, second_part:bool) {
+fn day2 (lines:Vec<String>, second_part:bool) -> u32 {
     // Rock = 1, Paper = 2, Scissors = 3,
     // Lose, draw, win: 0, 3, 6
 
-    let buf_read = BufReader::new(File::open(filename).expect("file not found!"));
-
     let mut total_score = 0;
-    for line in buf_read.lines().map(|x| x.unwrap()) {
-        let s:Vec<&str> = line.split(" ").collect();
-        let elf = i8::try_from("ABC".find(s[0]).unwrap()).unwrap() + 1;
+    for line in lines {
+        let (elf_string, me_string) = {let s = line.split(" ").collect::<Vec<&str>>();(s[0],s[1])};
+        let elf = i8::try_from("ABC".find(elf_string).unwrap()).unwrap() + 1;
         let (me, points);
         if false == second_part {
-            me = i8::try_from("XYZ".find(s[1]).unwrap()).unwrap() + 1;
+            me = i8::try_from("XYZ".find(me_string).unwrap()).unwrap() + 1;
             points = match (elf, me) {
                 (elf, me) if (elf - me == 1) || (me - elf == 2) => {0},
                 (elf, me) if elf == me => {3},
@@ -65,7 +71,7 @@ fn day2 (filename:String, second_part:bool) {
                 (_, _) => {panic!("Unexpected elf me pair {} {}", elf, me);},
             };
         } else {
-            points = i8::try_from("XYZ".find(s[1]).unwrap()).unwrap() * 3;
+            points = i8::try_from("XYZ".find(me_string).unwrap()).unwrap() * 3;
             me = match (elf, points) {
                 (elf, points) if points == 0 => {if elf != 1 {elf - 1} else {3}},
                 (elf, points) if points == 3 => {elf},
@@ -76,14 +82,10 @@ fn day2 (filename:String, second_part:bool) {
 
         total_score += points as u32 + me as u32;
     }
-    println!("{}", total_score);
+    total_score
 }
 
-fn day3 (filename:String, second_part:bool) {
-    // Rock = 1, Paper = 2, Scissors = 3,
-    // Lose, draw, win: 0, 3, 6
-
-    let buf_read = BufReader::new(File::open(filename).expect("file not found!"));
+fn day3 (lines:Vec<String>, second_part:bool) -> u32 {
 
     let priority = |x| match x {
         x if matches!(x, 'a'..='z') => {1 + x as u32 - 'a' as u32},
@@ -93,7 +95,7 @@ fn day3 (filename:String, second_part:bool) {
 
     let mut sum = 0;
     if false == second_part {
-        for line in buf_read.lines().map(|x| x.unwrap()) {
+        for line in lines {
             let compartment1 = &line[..(line.len()/2)];
             let compartment2 = &line[(line.len()/2)..];
             let common:Vec<char> = compartment1.chars().filter(|x| compartment2.contains(*x)).collect(); 
@@ -101,7 +103,7 @@ fn day3 (filename:String, second_part:bool) {
         }
     } else {
         let mut common:Vec<char> = Vec::<char>::new();
-        for (line_count, line) in buf_read.lines().map(|x| x.unwrap()).enumerate() {
+        for (line_count, line) in lines.into_iter().enumerate() {
             common = if line_count % 3 == 0 {
                          line.chars().collect()
                      } else {
@@ -112,76 +114,35 @@ fn day3 (filename:String, second_part:bool) {
             }
         }
     }
-    println!("{}", sum);
+    sum
 }
 
+fn day4 (lines:Vec<String>, second_part:bool) -> u32 {
+    // Check if all items are in one range or vice versa
+    let fully_contained = |v:Vec<u32>| { ({v[0]..=v[1]}.all(|i| {v[2]..=v[3]}.contains(&i))) ||
+                                         ({v[2]..=v[3]}.all(|i| {v[0]..=v[1]}.contains(&i)))};
+    let any_overlap = |v:Vec<u32>| { ({v[0]..=v[1]}.any(|i| {v[2]..=v[3]}.contains(&i))) ||
+                                     ({v[2]..=v[3]}.any(|i| {v[0]..=v[1]}.contains(&i)))};
+    let fully_contained = if !second_part {fully_contained} else {any_overlap};
 
-/* Some initial attempts */
-fn _day2_long (filename:String, second_part:bool) {
-    #[derive(Copy,Clone, PartialEq)]
-    enum RPS {
-        Rock = 1,
-        Paper = 2,
-        Scissors = 3,
+    // Split a line from N1-N2,N3-N4 into a vector of u32
+    let split_ints = |line:String| {line.split(",").flat_map(|x| x.split("-")).map(|l| l.parse::<u32>().unwrap()).collect()};
+    // Count how many lines are fully contained.
+    lines.into_iter().filter(|line| fully_contained(split_ints(line.clone()))).count().try_into().unwrap()
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn test_days() {
+        // Results are specific to the specific input files stored in the repo.
+        assert_eq!(super::call_day_func(1, false), 71934);
+        assert_eq!(super::call_day_func(1, true), 211447);
+        assert_eq!(super::call_day_func(2, false), 13268);
+        assert_eq!(super::call_day_func(2, true), 15508);
+        assert_eq!(super::call_day_func(3, false), 8109);
+        assert_eq!(super::call_day_func(3, true), 2738);
+        assert_eq!(super::call_day_func(4, false), 507);
+        assert_eq!(super::call_day_func(4, true), 897);
     }
-
-    let buf_read = BufReader::new(File::open(filename).expect("file not found!"));
-
-    let mut total_score = 0;
-    for line in buf_read.lines().map(|x| x.unwrap()) {
-        let s:Vec<&str> = line.split(" ").collect();
-
-        // Convert to enum
-        let rps_match = |allocation:&str, input| {
-            let expected:Vec<String> = allocation.chars().collect::<Vec<char>>().into_iter().map(|x| x.to_string()).collect();
-            match input {
-                s if s == expected[0] => {RPS::Rock},
-                s if s == expected[1] => {RPS::Paper},
-                s if s == expected[2] => {RPS::Scissors},
-                _ => panic!("Unexpected string {} must be from {}", input, allocation),
-
-            }};
-
-        let me;
-        let points;
-        let elf = rps_match("ABC", s[0]);
-        if second_part {
-            points = match s[1] {
-                "X" => {0},
-                "Y" => {3},
-                "Z" => {6},
-                _ => panic!("Unexpected string {}", s[1]),
-            };
-            me = match (elf, points) {
-                (elf, points) if points == 3 => {elf}, // Draw
-                (elf, points) if points == 0 => {
-                    match elf {
-                        RPS::Rock => {RPS::Scissors},
-                        RPS::Paper => {RPS::Rock},
-                        RPS::Scissors => {RPS::Paper},
-                    }}, 
-                (elf, points) if points == 6 => {
-                    match elf {
-                        RPS::Rock => {RPS::Paper},
-                        RPS::Paper => {RPS::Scissors},
-                        RPS::Scissors => {RPS::Rock},
-                    }}, 
-                (_, _) => {panic!("Unexpected elf point combination");},
-            }
-
-        } else {
-            me = rps_match("XYZ", s[1]);
-
-            points = match (elf, me) {
-                (elf, me) if elf == me => {3},
-                (elf, me) if elf == RPS::Rock && me == RPS::Paper => {6},
-                (elf, me) if elf == RPS::Scissors && me == RPS::Rock => {6},
-                (elf, me) if elf == RPS::Paper && me == RPS::Scissors => {6},
-                _ => {0},
-
-            };
-        }
-        total_score += points as u32 + me as u32;
-    }
-    println!("{}", total_score);
 }
