@@ -297,23 +297,13 @@ fn day8 (lines:Vec<String>, second_part:bool) -> u32 {
     for row in 0..rows.len() {
         for column in 0..rows[row].len() {
             if !second_part {
-                let mut up_blocked = false;
-                let mut down_blocked = false;
-                let mut right_blocked = false;
-                let mut left_blocked = false;
+                let height = rows[row][column];
+                let fold_check = {|(blocked,current), h| (blocked || h >= &current, height)};
+                let (up_blocked,_)    =  rows[0..row].iter().map(|c| &c[column]).fold((false,height), fold_check);
+                let (down_blocked,_)  =  rows[row+1..rows.len()].iter().map(|c| &c[column]).fold((false,height), fold_check);
+                let (left_blocked,_)  =  rows[row][0..column].iter().fold((false,height), fold_check);
+                let (right_blocked,_) =  rows[row][column+1..rows[row].len()].iter().fold((false,height), fold_check);
 
-                for up in 0..row {
-                    up_blocked = up_blocked || rows[up][column] >= rows[row][column];
-                }
-                for down in (row+1)..rows.len() {
-                    down_blocked = down_blocked || rows[down][column] >= rows[row][column];
-                }
-                for left in 0..column {
-                    left_blocked = left_blocked || rows[row][left] >= rows[row][column];
-                }
-                for right in (column+1)..rows[row].len() {
-                    right_blocked = right_blocked || rows[row][right] >= rows[row][column];
-                }
                 if !(up_blocked && down_blocked && left_blocked && right_blocked) {
                     count += 1;
                 }
@@ -323,36 +313,21 @@ fn day8 (lines:Vec<String>, second_part:bool) -> u32 {
                 let mut right_distance = 0;
                 let mut left_distance = 0;
 
-                for up in (0..row).rev() {
-                    up_distance += 1;
-                    if rows[up][column] >= rows[row][column] {
-                        break;
-                    }
-                }
-                for down in (row+1)..rows.len() {
-                    down_distance += 1;
-                    if rows[down][column] >= rows[row][column] {
-                        break;
-                    }
-                }
-                for left in (0..column).rev() {
-                    left_distance += 1;
-                    if rows[row][left] >= rows[row][column] {
-                        break;
-                    }
-                }
-                for right in (column+1)..rows[row].len() {
-                    right_distance += 1;
-                    if rows[row][right] >= rows[row][column] {
-                        break;
-                    }
-                }
+                let count_func = |s:Vec<u32>, distance:&mut u32| { 
+                    for t in s {
+                        *distance += 1;
+                        if t >= rows[row][column] { break; }
+                    }};
+                count_func(rows[0..row].iter().rev().map(|a| a[column]).collect::<Vec<u32>>(), &mut up_distance);
+                count_func(rows[row+1..rows.len()].iter().map(|a| a[column]).collect::<Vec<u32>>(), &mut down_distance);
+                count_func(rows[row][0..column].iter().rev().map(|a| *a).collect::<Vec<u32>>(), &mut left_distance);
+                count_func(rows[row][column+1..rows[row].len()].iter().map(|a| *a).collect::<Vec<u32>>(), &mut right_distance);
+
                 count = std::cmp::max(count, up_distance*down_distance*right_distance*left_distance);
             }
         }
     }
     count
-
 }
 
 #[cfg(test)]
