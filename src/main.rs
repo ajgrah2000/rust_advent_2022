@@ -5,6 +5,7 @@ use std::io::BufReader;
 use std::io::prelude::*;
 use std::collections::VecDeque;
 use std::collections::HashSet;
+use std::collections::HashMap;
 
 #[derive(FromArgs)]
 /// Run selected advent of code functions.
@@ -37,6 +38,8 @@ fn call_day_func (day_number:u8, second_part:bool) -> String {
             4 => {format!("{}", day4(lines, second_part))},
             5 => {day5(lines, second_part)},
             6 => {format!("{}", day6(lines, second_part))},
+            7 => {format!("{}", day7(lines, second_part))},
+            8 => {format!("{}", day8(lines, second_part))},
             _ => {format!("Unsupported day {}", day_number)}
     }
 }
@@ -234,6 +237,124 @@ fn day6 (lines:Vec<String>, second_part:bool) -> u32 {
     0
 }
 
+fn day7 (lines:Vec<String>, second_part:bool) -> u32 {
+
+    let mut current_path = VecDeque::<String>::new();
+    // Hash of 'full path, total size (including sub directories)
+    let mut dir_hash = HashMap::new();
+    for line in lines {
+        let (cd_token, ls_token, dir_token) = ("$ cd ", "$ ls", "dir ");
+        match line {
+            line if line.contains(cd_token) => {
+                let dir = &line[cd_token.len()..];
+                match dir { // Push/pop/reset current path
+                    dir if dir == ".." => {current_path.pop_back();},
+                    dir if dir == "/" =>  {current_path = VecDeque::from(["".to_string()]);},
+                    _ =>  { current_path.push_back(dir.to_string());},
+                }
+            }
+            line if line.contains(ls_token) => {},  // Do nothing for 'ls'
+            line if line.contains(dir_token) => {}, // Ignore 'directories'
+            // Input is well formed, the default output is always the file listing
+            _ => {let size_file = line.split_whitespace().collect::<Vec<&str>>();
+                  let size = size_file[0].parse::<u32>().unwrap();
+
+                  // Accumulate the size for current path and all parents.
+                  current_path.clone().into_iter().fold("".to_string(), |parent, k| {
+                      let current_size = dir_hash.entry(format!("{}/{}",parent,k)).or_insert(0);
+                      *current_size += size;
+                      parent + "/" + &k
+                  });
+            },
+        }
+    }
+
+    if !second_part {
+        let mut total = 0;
+        for (_, data) in dir_hash {
+            // Only total directories over 100000
+            if data  <= 100000 {
+                total += data;
+            }
+        }
+        total
+    } else {
+        let max_space = 70000000;
+        let required_unused_space = 30000000;
+        let current_unused = max_space - dir_hash.get("/").unwrap();
+        let need_to_free = required_unused_space  - current_unused;
+        dir_hash.into_iter().filter(|(_,d)| d > &need_to_free).fold(max_space, |min,(_,d)| std::cmp::min(min,d))
+    }
+}
+
+fn day8 (lines:Vec<String>, second_part:bool) -> u32 {
+    let mut rows = Vec::new();
+    for line in lines {
+        rows.push(line.chars().into_iter().map(|c| c as u32 - '0' as u32).collect::<Vec<u32>>());
+    }
+
+    let mut count = 0;
+    for row in 0..rows.len() {
+        for column in 0..rows[row].len() {
+            if !second_part {
+                let mut up_blocked = false;
+                let mut down_blocked = false;
+                let mut right_blocked = false;
+                let mut left_blocked = false;
+
+                for up in 0..row {
+                    up_blocked = up_blocked || rows[up][column] >= rows[row][column];
+                }
+                for down in (row+1)..rows.len() {
+                    down_blocked = down_blocked || rows[down][column] >= rows[row][column];
+                }
+                for left in 0..column {
+                    left_blocked = left_blocked || rows[row][left] >= rows[row][column];
+                }
+                for right in (column+1)..rows[row].len() {
+                    right_blocked = right_blocked || rows[row][right] >= rows[row][column];
+                }
+                if !(up_blocked && down_blocked && left_blocked && right_blocked) {
+                    count += 1;
+                }
+            } else {
+                let mut up_distance = 0;
+                let mut down_distance = 0;
+                let mut right_distance = 0;
+                let mut left_distance = 0;
+
+                for up in (0..row).rev() {
+                    up_distance += 1;
+                    if rows[up][column] >= rows[row][column] {
+                        break;
+                    }
+                }
+                for down in (row+1)..rows.len() {
+                    down_distance += 1;
+                    if rows[down][column] >= rows[row][column] {
+                        break;
+                    }
+                }
+                for left in (0..column).rev() {
+                    left_distance += 1;
+                    if rows[row][left] >= rows[row][column] {
+                        break;
+                    }
+                }
+                for right in (column+1)..rows[row].len() {
+                    right_distance += 1;
+                    if rows[row][right] >= rows[row][column] {
+                        break;
+                    }
+                }
+                count = std::cmp::max(count, up_distance*down_distance*right_distance*left_distance);
+            }
+        }
+    }
+    count
+
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -251,5 +372,9 @@ mod tests {
         assert_eq!(super::call_day_func(5, true),  "RMHFJNVFP");
         assert_eq!(super::call_day_func(6, false),      "1134");
         assert_eq!(super::call_day_func(6, true),       "2263");
+        assert_eq!(super::call_day_func(7, false),    "919137");
+        assert_eq!(super::call_day_func(7, true),    "2877389");
+        assert_eq!(super::call_day_func(8, false),      "1798");
+        assert_eq!(super::call_day_func(8, true),     "259308");
     }
 }
