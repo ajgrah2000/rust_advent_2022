@@ -41,6 +41,7 @@ fn call_day_func (day_number:u8, second_part:bool) -> String {
             7 => {format!("{}", day7(lines, second_part))},
             8 => {format!("{}", day8(lines, second_part))},
             9 => {format!("{}", day9(lines, second_part))},
+           10 => {format!("{}", day10(lines, second_part))},
             _ => {format!("Unsupported day {}", day_number)}
     }
 }
@@ -334,30 +335,17 @@ fn day8 (lines:Vec<String>, second_part:bool) -> u32 {
 fn day9(lines:Vec<String>, second_part:bool) -> u32 {
     let rope_length = if second_part {10} else {2};
     let mut rope_positions = vec![(0,0);rope_length];
-    let mut tail_hash_map = HashMap::new();
+    let mut tail_hash_set = HashSet::new();
 
     let tail_func = |head:(i32,i32), tail:(i32,i32) | {
-        if {head.0 - tail.0}.abs() > 1 ||
-           {head.1 - tail.1}.abs() > 1 {
+        if {head.0 - tail.0}.abs() > 1 || {head.1 - tail.1}.abs() > 1 {
                ({head.0 - tail.0}.signum() + tail.0, tail.1 + {head.1 - tail.1}.signum())
            } else {
                tail
            }
     };
 
-    let _display = |rope:&Vec<(i32,i32)>,grid_size| {let mut grid = vec![vec!['.';grid_size];grid_size];
-                          for (i, (x,y)) in rope.iter().enumerate() {
-                              grid[(grid_size as i32/2 + *x) as usize][(grid_size as i32/2-*y) as usize] = (('0' as u8) + i as u8) as char;
-                          }
-                          for y in 0..grid_size {
-                              for x in 0..grid_size {
-                                  print!("{}", grid[x][y]);
-                              }
-                              println!("");
-                          }
-    };
-
-    tail_hash_map.insert(rope_positions[rope_positions.len()-1],1);
+    tail_hash_set.insert(rope_positions[rope_positions.len()-1]);
     for line in lines {
         let move_split = line.split_whitespace().collect::<VecDeque<&str>>();
         let distance = move_split[1].parse::<u32>().unwrap();
@@ -376,11 +364,51 @@ fn day9(lines:Vec<String>, second_part:bool) -> u32 {
                 rope_positions[i+1] = tail_func(rope_positions[i],
                                               rope_positions[i+1]);
             }
-            tail_hash_map.insert(rope_positions[rope_positions.len()-1],1);
+            tail_hash_set.insert(rope_positions[rope_positions.len()-1]);
         }
     }
 
-    tail_hash_map.keys().len() as u32
+    tail_hash_set.len() as u32
+}
+
+fn day10(lines:Vec<String>, second_part:bool) -> u32 {
+    let (add, noop) = ("addx", "noop");
+    let (add_cycles, noop_cycles) = (2, 1);
+    let (special_offset, special_modulo) = (20, 40);
+    let mut cycles = 0;
+    let mut x = 1;
+    let mut next_capture = special_offset;
+    let mut signal_strength = 0;
+    for line in lines {
+        let (x_offset, instruction_cycles) = match line {
+            line if line.contains(add) => {
+                let offset = line.split_whitespace().nth(1).unwrap().parse::<i32>().unwrap();
+                (offset, add_cycles)}
+            line if line.contains(noop) => {(0, noop_cycles)}, // Just have 'noop' change x by 0
+            _ => {panic!("Unexpected instruction {}", line);}
+        };
+
+        for _i in 0..instruction_cycles {
+            if second_part {
+                if {x-1..=x+1}.contains(&(cycles % 40))  {
+                    print!("#");
+                } else {
+                    print!(".");
+                }
+                if cycles % 40 == 39 {
+                    println!("");
+                }
+            }
+
+            cycles += 1;
+            if cycles == next_capture {
+                signal_strength += next_capture * x;
+                next_capture += special_modulo;
+            }
+        }
+        x += x_offset;
+    }
+    signal_strength as u32
 }
 
 #[cfg(test)]
