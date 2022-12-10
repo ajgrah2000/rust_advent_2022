@@ -40,6 +40,7 @@ fn call_day_func (day_number:u8, second_part:bool) -> String {
             6 => {format!("{}", day6(lines, second_part))},
             7 => {format!("{}", day7(lines, second_part))},
             8 => {format!("{}", day8(lines, second_part))},
+            9 => {format!("{}", day9(lines, second_part))},
             _ => {format!("Unsupported day {}", day_number)}
     }
 }
@@ -330,6 +331,58 @@ fn day8 (lines:Vec<String>, second_part:bool) -> u32 {
     count
 }
 
+fn day9(lines:Vec<String>, second_part:bool) -> u32 {
+    let rope_length = if second_part {10} else {2};
+    let mut rope_positions = vec![(0,0);rope_length];
+    let mut tail_hash_map = HashMap::new();
+
+    let tail_func = |head:(i32,i32), tail:(i32,i32) | {
+        if {head.0 - tail.0}.abs() > 1 ||
+           {head.1 - tail.1}.abs() > 1 {
+               ({head.0 - tail.0}.signum() + tail.0, tail.1 + {head.1 - tail.1}.signum())
+           } else {
+               tail
+           }
+    };
+
+    let _display = |rope:&Vec<(i32,i32)>,grid_size| {let mut grid = vec![vec!['.';grid_size];grid_size];
+                          for (i, (x,y)) in rope.iter().enumerate() {
+                              grid[(grid_size as i32/2 + *x) as usize][(grid_size as i32/2-*y) as usize] = (('0' as u8) + i as u8) as char;
+                          }
+                          for y in 0..grid_size {
+                              for x in 0..grid_size {
+                                  print!("{}", grid[x][y]);
+                              }
+                              println!("");
+                          }
+    };
+
+    tail_hash_map.insert(rope_positions[rope_positions.len()-1],1);
+    for line in lines {
+        let move_split = line.split_whitespace().collect::<VecDeque<&str>>();
+        let distance = move_split[1].parse::<u32>().unwrap();
+        for _ in 0..distance {
+            let movement = match move_split[0] {
+                "R" => {( 1, 0)},
+                "L" => {(-1, 0)},
+                "U" => {( 0, 1)},
+                "D" => {( 0,-1)},
+                _ => {panic!("Unknown move {}:", move_split[0]);}
+            };
+            rope_positions[0] = {(rope_positions[0].0 + movement.0, 
+                                  rope_positions[0].1 + movement.1)};
+
+            for i in 0..(rope_positions.len()-1)  {
+                rope_positions[i+1] = tail_func(rope_positions[i],
+                                              rope_positions[i+1]);
+            }
+            tail_hash_map.insert(rope_positions[rope_positions.len()-1],1);
+        }
+    }
+
+    tail_hash_map.keys().len() as u32
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -351,5 +404,7 @@ mod tests {
         assert_eq!(super::call_day_func(7, true),    "2877389");
         assert_eq!(super::call_day_func(8, false),      "1798");
         assert_eq!(super::call_day_func(8, true),     "259308");
+        assert_eq!(super::call_day_func(9, false),      "6236");
+        assert_eq!(super::call_day_func(9, true),      "2449");
     }
 }
