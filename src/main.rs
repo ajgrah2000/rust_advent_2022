@@ -42,6 +42,8 @@ fn call_day_func (day_number:u8, second_part:bool) -> String {
             8 => {format!("{}", day8(lines, second_part))},
             9 => {format!("{}", day9(lines, second_part))},
            10 => {format!("{}", day10(lines, second_part))},
+           11 => {format!("{}", day11(lines, second_part))},
+           12 => {format!("{}", day12(lines, second_part))},
             _ => {format!("Unsupported day {}", day_number)}
     }
 }
@@ -371,7 +373,7 @@ fn day9(lines:Vec<String>, second_part:bool) -> u32 {
     tail_hash_set.len() as u32
 }
 
-fn day10(lines:Vec<String>, second_part:bool) -> u32 {
+fn day10(lines:Vec<String>, second_part:bool) -> String {
     let (add, noop) = ("addx", "noop");
     let (add_cycles, noop_cycles) = (2, 1);
     let (special_offset, special_modulo) = (20, 40);
@@ -379,6 +381,7 @@ fn day10(lines:Vec<String>, second_part:bool) -> u32 {
     let mut x = 1;
     let mut next_capture = special_offset;
     let mut signal_strength = 0;
+    let mut display = "".to_string();
     for line in lines {
         let (x_offset, instruction_cycles) = match line {
             line if line.contains(add) => {
@@ -390,14 +393,10 @@ fn day10(lines:Vec<String>, second_part:bool) -> u32 {
 
         for _i in 0..instruction_cycles {
             if second_part {
-                if {x-1..=x+1}.contains(&(cycles % 40))  {
-                    print!("#");
-                } else {
-                    print!(".");
+                if cycles % 40 == 0 {
+                    display += "\n";
                 }
-                if cycles % 40 == 39 {
-                    println!("");
-                }
+                display += if {x-1..=x+1}.contains(&(cycles % 40)) {"#"} else {"."};
             }
 
             cycles += 1;
@@ -408,7 +407,178 @@ fn day10(lines:Vec<String>, second_part:bool) -> u32 {
         }
         x += x_offset;
     }
-    signal_strength as u32
+
+    if second_part {
+        display
+    } else {
+        format!("{}", signal_strength)
+    }
+}
+
+fn day11(lines:Vec<String>, second_part:bool) -> u64 {
+    let (monkey_token, starting_items_token, operation_token, test_token, true_token, false_token) = 
+        ("Monkey ", "  Starting items: ", "  Operation: new = ", 
+         "  Test: divisible by ", "    If true: throw to monkey ", "    If false: throw to monkey ");
+    // Operations: 'new = A * B', A-> num or old, A-> num or old.
+    
+    struct Monkey {
+        id: u32,
+        items: Vec<u64>,
+        operation: Box<dyn Fn(u64) -> u64>,
+        test:      u64,
+        true_monkey: u32,
+        false_monkey: u32,
+    }
+
+    let mut monkey;
+    let mut test;
+    let mut true_monkey;
+    let mut false_monkey;
+    let mut monkeys = Vec::<Monkey>::new();
+
+    let mut iter = lines.into_iter();
+    while let Some(mut line) = iter.next() {
+
+        if "" == line { 
+            line = iter.next().unwrap();
+        }
+        monkey = line[monkey_token.len()..(line.len()-1)].parse::<u32>().unwrap();
+        line = iter.next().unwrap();
+        let items = line[starting_items_token.len()..].split(", ").map(|l| l.parse::<u64>().unwrap()).collect::<Vec<u64>>();
+
+        line = iter.next().unwrap();
+        let operation:Box::<dyn Fn(u64) -> u64> = match line {
+            line if line.contains("*") && 2 == line.matches("old").count() => {Box::new(|x| {x*x})},
+            line if line.contains("+") && 2 == line.matches("old").count() => {Box::new(|x| {x+x})},
+            line if line.contains("+") && 1 == line.matches("old").count() => {
+                let operand = line[operation_token.len()..line.len()].split(" + ").nth(1).unwrap().parse::<u64>().unwrap();
+                Box::new(move |x| {x+operand})
+            },
+            line if line.contains("*") && 1 == line.matches("old").count() => {
+                let operand = line[operation_token.len()..line.len()].split(" * ").nth(1).unwrap().parse::<u64>().unwrap();
+                Box::new(move |x| {x*operand})
+            }
+            _ => {panic!("Unexpected match.");}
+        };
+
+        line = iter.next().unwrap();
+        test = line[test_token.len()..line.len()].parse::<u64>().unwrap();
+
+        line = iter.next().unwrap();
+        true_monkey = line[true_token.len()..line.len()].parse::<u32>().unwrap();
+
+        line = iter.next().unwrap();
+        false_monkey = line[false_token.len()..line.len()].parse::<u32>().unwrap();
+
+        assert_eq!(monkey as usize, monkeys.len());  // Check that they are sequential.
+        monkeys.push(Monkey{id:monkey, items:items, operation: operation, test: test, true_monkey:true_monkey, false_monkey:false_monkey});
+    }
+
+
+    // Get the items, so they're mutable.
+    let mut divisor = 1;
+    let mut monkey_items = Vec::<VecDeque::<u64>>::new();
+    let mut inspections = vec![0;monkeys.len()];
+    for current_monkey in monkeys.iter() {
+        divisor *= current_monkey.test;
+        monkey_items.push(VecDeque::<u64>::new());
+        for i in current_monkey.items.iter() {
+            monkey_items[current_monkey.id as usize].push_back(*i);
+        }
+    }
+
+    for _round in 0.. if !second_part{20} else {10000} {
+        for current_monkey in monkeys.iter() {
+            for _ in 0..monkey_items[current_monkey.id as usize].len() {
+                inspections[current_monkey.id as usize] += 1;
+                let mut worry = monkey_items[current_monkey.id as usize].pop_front().unwrap();
+                worry = (current_monkey.operation)(worry);
+                worry /= if !second_part{3} else {1};
+                if 0 == worry % current_monkey.test {
+                    monkey_items[current_monkey.true_monkey as usize].push_back(worry % divisor);
+                } else {
+                    monkey_items[current_monkey.false_monkey as usize].push_back(worry % divisor);
+                }
+            }
+        }
+    }
+    inspections.sort();
+    inspections.reverse();
+    inspections[0..2].iter().fold(1,|total,i| {total * i})
+}
+
+fn day12(lines:Vec<String>, second_part:bool) -> u32 {
+    let char_to_height = |x| {
+        match x {
+            'a'..='z' => {x as u32 - 'a' as u32},
+            'S' => {'a' as u32 - 'a' as u32},
+            'E' => {'z' as u32 - 'a' as u32},
+            _ => {panic!("Unexpected char {}", x);}
+        }
+    };
+
+    let mut grid = Vec::<Vec::<u32>>::new();
+    let mut start = (0,0);
+    let mut destination = (0,0);
+
+    for (index, line) in lines.iter().enumerate() {
+        grid.push(Vec::<u32>::new());
+        grid[index] = line.chars().into_iter().map(|c| char_to_height(c)).collect();
+        if line.contains('S') {start = (line.chars().position(|c| c == 'S').unwrap(),index)};
+        if line.contains('E') {destination = (line.chars().position(|c| c == 'E').unwrap(),index)};
+    }
+
+    let width = grid[0].len();
+    let height = grid.len();
+    let max_distance = width * height;
+    let mut distance = vec![vec![max_distance;width];height];
+
+    let update_distance = |grid:&Vec::<Vec::<u32>>, distance:&mut Vec::<Vec::<usize>>, location:(usize,usize), i| {
+        if distance[location.1][location.0] == i {
+            // check up, down, left, right
+            let offsets:Vec::<(i32,i32)> = vec![(1,0), (-1,0), (0,1), (0,-1)];
+            for offset in offsets {
+                if (location.0 as i32 + offset.0) >= 0 && (location.0 as i32 + offset.0) < width as i32 && 
+                   (location.1 as i32 + offset.1) >= 0 && (location.1 as i32 + offset.1) < height as i32 && 
+                    distance[(location.1 as i32 + offset.1) as usize][(location.0 as i32 + offset.0) as usize] == max_distance &&
+                    ((grid[(location.1 as i32 + offset.1) as usize][(location.0 as i32 + offset.0) as usize] + 1) >= (grid[location.1][location.0]))
+                    {
+                        distance[(location.1 as i32 + offset.1) as usize][(location.0  as i32+ offset.0) as usize] = distance[location.1][location.0] + 1;
+                    }
+            }
+        }
+    };
+
+    distance[destination.1][destination.0] = 0;
+
+    // Stop once the start has been reached
+    let mut i = 0;
+    while max_distance == distance[start.1][start.0] {
+        let mut original_distance = distance;
+        for y in 0..height {
+            for x in 0..width {
+                update_distance(&grid, &mut original_distance, (x,y), i);
+            }
+        }
+        i += 1;
+        distance = original_distance;
+    }
+
+    // Find the 'a' closest to the destination
+    let mut closest = max_distance;
+    if second_part {
+        for y in 0..height {
+            for x in 0..width {
+                if 0 == grid[y][x] {
+                    closest = std::cmp::min(distance[y][x], closest);
+                }
+            }
+        }
+    } else {
+        closest = distance[start.1][start.0];
+    }
+
+    closest as u32 - distance[destination.1][destination.0] as u32
 }
 
 #[cfg(test)]
@@ -434,5 +604,16 @@ mod tests {
         assert_eq!(super::call_day_func(8, true),     "259308");
         assert_eq!(super::call_day_func(9, false),      "6236");
         assert_eq!(super::call_day_func(9, true),      "2449");
+        assert_eq!(super::call_day_func(10, false),    "11960");
+        assert_eq!(super::call_day_func(10, true),     "\n####...##..##..####.###...##..#....#..#.\n\
+                                                          #.......#.#..#.#....#..#.#..#.#....#..#.\n\
+                                                          ###.....#.#....###..#..#.#....#....####.\n\
+                                                          #.......#.#....#....###..#.##.#....#..#.\n\
+                                                          #....#..#.#..#.#....#....#..#.#....#..#.\n\
+                                                          ####..##...##..#....#.....###.####.#..#.");
+        assert_eq!(super::call_day_func(11, false),    "61503");
+        assert_eq!(super::call_day_func(11, true), "14081365540");
+        assert_eq!(super::call_day_func(12, false),      "440");
+        assert_eq!(super::call_day_func(12, true),       "439");
     }
 }
