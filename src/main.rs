@@ -807,7 +807,110 @@ fn day15(lines:Vec<String>, second_part:bool) -> u64  {
 }
 
 fn day16(lines:Vec<String>, second_part:bool) -> u32  {
-    0
+    // Get the shortest distance between each pair of Valves with a non-zero flow rate.
+    // Never turn on a valve with a zero flow rate.
+    // Keep a set of valves that have been turned on
+    // Keep a set of valves that are off (non-zero flow rate).
+
+    // Valve AA has flow rate=0; tunnels lead to valves DD, II, BB
+    
+    let mut valve_flow_rates:HashMap<String,u32> = HashMap::new();
+    let mut tunnel_links = HashMap::new();
+    let mut unopen_valves = HashSet::new();
+    for line in lines {
+        let no_commas = line.replace([',',';'],"");
+        let words = no_commas.split_whitespace().collect::<Vec<&str>>();
+        let valve = words[1].to_string();
+        for word in &words {
+            match *word {
+                "Valve" => {},
+                word if word.contains("rate=") => {
+                    valve_flow_rates.insert(valve.clone(), word.strip_prefix("rate=").unwrap().parse::<u32>().unwrap());
+                },
+                _ => {}
+
+            }
+        }
+        let exit_tunnels = words.iter().rev().cloned()
+                                .take_while(|w| !w.contains("valve"))
+                                .map(|w| w.to_string())
+                                .collect::<Vec<String>>();
+          tunnel_links.insert(valve.clone(), exit_tunnels.iter().cloned().collect::<Vec<String>>()); 
+    }
+    for (valve, rate) in &valve_flow_rates {
+        if *rate > 0 {
+            unopen_valves.insert(valve.to_string());
+        }
+    }
+
+    fn shortest(tunnel_links: &HashMap<String, Vec::<String>>, src:&String, dst:&String, max_depth:u32) -> u32  {
+        // Brute force search
+        if src == dst || 0 == max_depth {
+            0
+        } else {
+            tunnel_links.get(src).unwrap().iter().fold(max_depth, 
+                                       |min, d| std::cmp::min(min, shortest(tunnel_links, d, dst, max_depth - 1) + 1))
+        }
+    }
+
+    let max_shortest_path = 16;
+    let mut shortest_paths:HashMap<(String,String),u32>  = HashMap::new();
+    for src in &unopen_valves {
+        for dst in &unopen_valves {
+            let distance = shortest(&tunnel_links, &src, &dst, max_shortest_path);
+            shortest_paths.insert((src.to_string(), dst.to_string()), distance);
+            println!("{} {} {}", src, dst, distance);
+        }
+    }
+
+    let starting_point = "AA".to_string();
+    for dst in &unopen_valves {
+        shortest_paths.insert((starting_point.to_string(), dst.to_string()), 
+                              shortest(&tunnel_links, &starting_point, &dst, max_shortest_path));
+    }
+
+    fn calculate_flow_per_step(rates:HashMap<String, u32>, remaining_valves: HashSet::<String>) -> u32  {
+        rates.iter().fold(0, |sum, (location, rate)| if remaining_valves.contains(*&location) {
+            sum
+        } else {
+            sum + rate
+        })
+    }
+
+    fn total_flow(rates:&HashMap<String, u32>, tunnel_links: &HashMap<String, Vec::<String>>, 
+                  shortest: &HashMap<(String,String),u32>, 
+                  location:String, remaining_valves: &HashSet::<String>, time_remaining:u32) -> u32  {
+        if 0 == time_remaining {
+            return 0;
+        }
+
+        if remaining_valves.len() == 0 {
+            time_remaining * calculate_flow_per_step(rates.clone(), remaining_valves.clone())
+        } else {
+            remaining_valves.iter().fold(0, |max, d| std::cmp::max(max, {
+                let distance = shortest.get(&(location.clone(), d.to_string())).unwrap();
+                let mut after_remove = remaining_valves.clone();
+                if time_remaining > 0 {
+                    let step_rate = calculate_flow_per_step(rates.clone(), remaining_valves.clone());
+                    let mut branch_sum = step_rate; // Open valve time
+                    after_remove.remove(d);
+                    if time_remaining > *distance {
+                        branch_sum += step_rate * distance;
+                        branch_sum += total_flow(rates, tunnel_links, shortest, d.to_string(), 
+                                                 &after_remove, time_remaining - distance - 1); 
+                    } else {
+                        branch_sum += step_rate * time_remaining;
+                    }
+                    branch_sum
+                } else {
+                    0
+                }
+            }))
+        }
+    }
+
+    total_flow(&valve_flow_rates, &tunnel_links, &shortest_paths, 
+                                    starting_point.to_string(), &unopen_valves, 30))
 }
 
 #[cfg(test)]
