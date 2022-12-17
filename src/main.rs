@@ -47,6 +47,7 @@ fn call_day_func (day_number:u8, second_part:bool) -> String {
            13 => {format!("{}", day13(lines, second_part))},
            14 => {format!("{}", day14(lines, second_part))},
            15 => {format!("{}", day15(lines, second_part))},
+           16 => {format!("{}", day16(lines, second_part))},
             _ => {format!("Unsupported day {}", day_number)}
     }
 }
@@ -797,11 +798,16 @@ fn day15(lines:Vec<String>, second_part:bool) -> u64  {
                 && !beacon_positions.contains(&test_position) {
                     // Increase if within the 'no beacon' zone and it's not a beacon position.
                     result = test_position.0 as u64 * 4000000 + test_position.1 as u64;
+                    break; // Expect 1 result, so break out of the loop
             }
         }
     }
 
     result
+}
+
+fn day16(lines:Vec<String>, second_part:bool) -> u32  {
+    0
 }
 
 #[cfg(test)]
