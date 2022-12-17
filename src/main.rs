@@ -45,6 +45,7 @@ fn call_day_func (day_number:u8, second_part:bool) -> String {
            11 => {format!("{}", day11(lines, second_part))},
            12 => {format!("{}", day12(lines, second_part))},
            13 => {format!("{}", day13(lines, second_part))},
+           14 => {format!("{}", day14(lines, second_part))},
             _ => {format!("Unsupported day {}", day_number)}
     }
 }
@@ -662,6 +663,81 @@ fn day13(lines:Vec<String>, second_part:bool) -> u32 {
     }
 }
 
+fn day14(lines:Vec<String>, second_part:bool) -> u32  {
+    // Read lines of rock (x,y) -> (x,y)
+    // x = distance to right, y = distance down
+    // sand = '+', 1 unit at a time
+    // sand moves 'down', then diagonally 'down left'-> 'down right' keeps moving until blocked.
+    // Stop when sand falls greater than lowest rock.
+    
+    // Just represent the cave as a 'hash set' of points, rather than a grid. Once settled, sand
+    // behaves like rock.
+    let mut cave = HashSet::<(u32,u32)>::new();
+
+    for line in lines {
+        // Convert the line to a list of coordinates.
+        let coordinates = line.split(" -> ").map(|point| {let p = point.split(",").map(|value| {value.parse::<u32>().unwrap()}).collect::<Vec<u32>>();(p[0], p[1])}).collect::<Vec<(u32,u32)>>();
+
+        let mut coord_it = coordinates.iter().peekable(); 
+        while let Some(coord) = coord_it.next() {
+            if let Some(next) = coord_it.peek()
+            {
+                let either_order_range = |a,b| {std::cmp::min(a,b)..=std::cmp::max(a,b)};
+                for x in either_order_range(coord.0, next.0) {
+                    for y in either_order_range(coord.1, next.1) {
+                        cave.insert((x,y));
+                    }
+                }
+            }
+        }
+    }
+
+    let mut max_depth = cave.iter().fold(0, |s, d| {std::cmp::max(s, d.1)});
+
+    if second_part { 
+        max_depth += 1;
+    }
+
+    let mut grains = 0;
+    let mut sand_position = (500, 0);
+    let mut keep_going = true;
+    while keep_going {
+
+        let offsets:Vec::<(i32,i32)> = vec![(0,1), (-1,1), (1,1)];
+        let apply_offset = |point:(u32,u32), offset:(i32,i32)| {((point.0 as i32 + offset.0) as u32, 
+                                                                 (point.1 as i32 + offset.1) as u32)};
+        let mut new_grain = false;
+        if let Some(empty_offset) = offsets.iter().find(|v| {!cave.contains(&apply_offset(sand_position, **v))}) {
+            sand_position = apply_offset(sand_position, *empty_offset);
+            
+            if second_part {
+                // Create a new grain if it hit the max depth allowed.
+                new_grain = sand_position.1 == max_depth;
+            }
+        } else {
+            new_grain = true;
+        }
+
+        if sand_position == (500,0) {
+            // Second part, if the end point is the start, then stop
+            keep_going = false;
+        }
+
+        if new_grain {
+            // If the sand 'hits the bottom'
+            grains += 1; // Count the grains of sand.
+            cave.insert(sand_position);
+            sand_position = (500, 0);
+        }
+
+        if sand_position.1 == max_depth {
+            keep_going = false;
+        }
+    }
+
+    grains
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -698,5 +774,7 @@ mod tests {
         assert_eq!(super::call_day_func(12, true),       "439");
         assert_eq!(super::call_day_func(13, false),      "6568");
         assert_eq!(super::call_day_func(13, true),       "19493");
+        assert_eq!(super::call_day_func(14, false),      "793");
+        assert_eq!(super::call_day_func(14, true),       "24166");
     }
 }
