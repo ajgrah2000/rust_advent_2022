@@ -46,6 +46,7 @@ fn call_day_func (day_number:u8, second_part:bool) -> String {
            12 => {format!("{}", day12(lines, second_part))},
            13 => {format!("{}", day13(lines, second_part))},
            14 => {format!("{}", day14(lines, second_part))},
+           15 => {format!("{}", day15(lines, second_part))},
             _ => {format!("Unsupported day {}", day_number)}
     }
 }
@@ -738,6 +739,71 @@ fn day14(lines:Vec<String>, second_part:bool) -> u32  {
     grains
 }
 
+fn day15(lines:Vec<String>, second_part:bool) -> u64  {
+
+    let mut info = Vec::<(i32,i32,i32,i32)>::new();
+    let mut beacon_positions = HashSet::<(i32,i32)>::new();
+    let sensor_beacon_distance:Vec::<(i32,i32,u32)>;
+    // Sensor at x=193758, y=2220950: closest beacon is at x=652350, y=2000000
+    for line in lines {
+        let line_iter = line.chars().into_iter();
+        let numbers = line_iter.filter(|x| x.is_digit(10) || *x=='-' || *x == ' ')
+                           .collect::<String>()
+                           .split_whitespace()
+                           .map(|s| s.parse::<i32>().unwrap())
+                           .collect::<Vec<i32>>();
+        // Sensor, beacon
+        info.push((numbers[0],numbers[1],numbers[2],numbers[3]));
+        beacon_positions.insert((numbers[2],numbers[3]));
+    }
+    sensor_beacon_distance = info.iter().map(|(sx,sy,bx,by)| {
+                                (*sx,*sy, ((sx-bx).abs() + (sy-by).abs()) as u32) })
+                                  .collect();
+    let no_beacon = |sensor_distance:(i32,i32,u32), position:(i32,i32)| {(((sensor_distance.0-position.0).abs() + 
+                                                   (sensor_distance.1-position.1).abs()) as u32) <=  sensor_distance.2};
+
+
+    let mut result:u64 = 0; 
+    if !second_part {
+        let minx = sensor_beacon_distance.iter().fold(0,|s, (sx,_sy,distance)| std::cmp::min(s, *sx - (*distance as i32)));
+        let maxx = sensor_beacon_distance.iter().fold(0,|s, (sx,_sy,distance)| std::cmp::max(s, *sx + (*distance as i32)));
+
+        for x in minx..=maxx {
+            let y = 2000000; // Search row for sample input is '10'
+            let test_position = (x, y);
+            if sensor_beacon_distance.iter().any(|sbd| {no_beacon(*sbd, test_position)})
+                && !beacon_positions.contains(&test_position) {
+                    // Increase if within the 'no beacon' zone and it's not a beacon position.
+                    result += 1;
+                }
+        }
+    } else {
+        // Test all points at a distance+1 from the closest beacon of each sensor.
+        let mut test_positions = Vec::<(i32,i32)>::new();
+        
+        for (sx, sy, distance) in &sensor_beacon_distance {
+            let check_distance = (distance + 1) as i32;
+            for i in 0..check_distance {
+                test_positions.push((sx + i, sy + (check_distance - i)));
+                test_positions.push((sx - i, sy - (check_distance - i)));
+                test_positions.push((sx + (check_distance - i), sy + i));
+                test_positions.push((sx - (check_distance - i), sy - i));
+            }
+        }
+
+        let max_search_area = 4000000; // Search area for sample input is '20'
+        for test_position in test_positions.iter().filter(|(x,y)| {0..=max_search_area}.contains(x) && {0..=max_search_area}.contains(y) ) {
+            if sensor_beacon_distance.iter().all(|sbd| {!no_beacon(*sbd, *test_position)})
+                && !beacon_positions.contains(&test_position) {
+                    // Increase if within the 'no beacon' zone and it's not a beacon position.
+                    result = test_position.0 as u64 * 4000000 + test_position.1 as u64;
+            }
+        }
+    }
+
+    result
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -776,5 +842,7 @@ mod tests {
         assert_eq!(super::call_day_func(13, true),       "19493");
         assert_eq!(super::call_day_func(14, false),      "793");
         assert_eq!(super::call_day_func(14, true),       "24166");
+        assert_eq!(super::call_day_func(15, false),      "5832528");
+        assert_eq!(super::call_day_func(15, true),       "13360899249595");
     }
 }
