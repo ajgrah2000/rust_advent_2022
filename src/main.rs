@@ -44,6 +44,7 @@ fn call_day_func (day_number:u8, second_part:bool) -> String {
            10 => {format!("{}", day10(lines, second_part))},
            11 => {format!("{}", day11(lines, second_part))},
            12 => {format!("{}", day12(lines, second_part))},
+           13 => {format!("{}", day13(lines, second_part))},
             _ => {format!("Unsupported day {}", day_number)}
     }
 }
@@ -581,6 +582,86 @@ fn day12(lines:Vec<String>, second_part:bool) -> u32 {
     closest as u32 - distance[destination.1][destination.0] as u32
 }
 
+//fn blah(lines:<Vec<String> as Trait>::Iter, second_part:bool) -> u32 {
+//    0
+//}
+
+fn day13(lines:Vec<String>, second_part:bool) -> u32 {
+
+    fn compare_list(left_string:String, right_string:String) -> bool {
+        let left_input = left_string.chars().collect::<Vec::<char>>();
+        let right_input = right_string.chars().collect::<Vec::<char>>();
+
+        let get_first_digit = |input:&[char]| {input.iter().take_while(|c| c.is_digit(10)).collect::<String>().parse::<u32>().unwrap()};
+        let skip_first_digit = |input:&[char]| {input.iter().skip_while(|c| c.is_digit(10)).collect::<String>()};
+
+        for ((l_idx, l), (r_idx, r)) in std::iter::zip(left_input.iter().enumerate(), right_input.iter().enumerate()) {
+            match (l, r) {
+                ('[','[') => {},
+                (',',',') => {},
+                (i,j) if i.is_digit(10) && j.is_digit(10) => {
+                    let left_num = get_first_digit(&left_input[l_idx..]);
+                    let right_num = get_first_digit(&right_input[l_idx..]);
+                    if left_num < right_num {
+                        return true;
+                    } else if left_num > right_num {
+                        return false;
+                    }
+                    else {
+                        return compare_list(left_input[l_idx..].iter().skip_while(|c| c.is_digit(10)).collect(), 
+                                            right_input[l_idx..].iter().skip_while(|c| c.is_digit(10)).collect());
+                    }
+                },
+                // If left is not a list, only need to compare the first value
+                (i,'[') if i.is_digit(10) => {
+                    let left_num = get_first_digit(&left_input[l_idx..]);
+                    return compare_list(format!("{}]{}",left_num, skip_first_digit(&left_input[(l_idx+1)..])),
+                                         right_input[(r_idx+1)..].iter().collect());
+
+                },
+                // If right is not a list, only need to compare the first value
+                ('[',j) if j.is_digit(10) => {
+                    let right_num = get_first_digit(&right_input[l_idx..]);
+                    return compare_list(left_input[(l_idx+1)..].iter().collect(),
+                                        format!("{}]{}",right_num, skip_first_digit(&right_input[(r_idx+1)..])));
+                },
+                (']',']') => {},
+                (']',_) => {return true}, // Left finished early
+                (_,']') => {return false},
+                _ => {panic!("Unmatched case {} {}", l, r);}
+            }
+        }
+        true
+    }
+
+    let mut remove_gaps = lines.clone().iter().filter(|x| **x != "".to_string()).map(|l| l.to_string()).collect::<Vec<String>>();
+    if !second_part {
+        let mut iter = remove_gaps.into_iter();
+        let mut sum_in_order = 0;
+        let mut index = 1;
+        while let Some(first_packet) = iter.next() {
+            let second_packet = iter.next().unwrap();
+            if compare_list(first_packet, second_packet) {
+                sum_in_order += index;
+            }
+            index += 1;
+        }
+        sum_in_order
+    } else {
+        let first_marker = "[[2]]".to_string();
+        let second_marker = "[[6]]".to_string();
+        remove_gaps.push(first_marker.clone()); 
+        remove_gaps.push(second_marker.clone()); 
+        remove_gaps.sort_by(|a,b| {if compare_list(a.to_string(),b.to_string()) {std::cmp::Ordering::Less} else {std::cmp::Ordering::Greater}});
+
+        // 1-based
+        let first_dividor = remove_gaps.iter().position(|x| *x == first_marker).unwrap() + 1;
+        let second_dividor = remove_gaps.iter().position(|x| *x == second_marker).unwrap() + 1;
+
+        (first_dividor * second_dividor) as u32
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -615,5 +696,7 @@ mod tests {
         assert_eq!(super::call_day_func(11, true), "14081365540");
         assert_eq!(super::call_day_func(12, false),      "440");
         assert_eq!(super::call_day_func(12, true),       "439");
+        assert_eq!(super::call_day_func(13, false),      "6568");
+        assert_eq!(super::call_day_func(13, true),       "19493");
     }
 }
