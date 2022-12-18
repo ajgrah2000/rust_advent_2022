@@ -859,83 +859,233 @@ fn day16(lines:Vec<String>, second_part:bool) -> u32  {
         }
     }
 
-    let mut shortest_paths:HashMap<(String,String),u32>  = HashMap::new();
+    let mut shortest_paths:HashMap<(&str,&str),u32>  = HashMap::new();
     for src in &unopen_valves {
         for dst in &unopen_valves {
             let distance = shortest(&tunnel_links, &src, &dst);
-            shortest_paths.insert((src.to_string(), dst.to_string()), distance);
+            shortest_paths.insert((src, dst), distance);
         }
     }
 
     let starting_point = "AA".to_string();
     for dst in &unopen_valves {
-        shortest_paths.insert((starting_point.to_string(), dst.to_string()), 
+        shortest_paths.insert((&starting_point, dst), 
                               shortest(&tunnel_links, &starting_point, &dst));
     }
 
-    fn calculate_flow_per_step(rates:HashMap<String, u32>, remaining_valves: HashSet::<String>) -> u32  {
-        rates.iter().fold(0, |sum, (location, rate)| if remaining_valves.contains(*&location) {
-            sum
-        } else {
-            sum + rate
-        })
+    fn calculate_flow_per_step_open(rates:&HashMap<String, u32>, open_valves: &HashSet::<String>) -> u32  {
+        rates.iter().fold(0, |sum, (location, rate)| if open_valves.contains(*&location) { sum + rate } else { sum })
     }
 
-    fn total_flow(rates:&HashMap<String, u32>, tunnel_links: &HashMap<String, Vec::<String>>, 
+    fn calculate_flow_per_step_closed(rates:&HashMap<String, u32>, closed_valves: &HashSet::<String>) -> u32  {
+        rates.iter().fold(0, |sum, (location, rate)| if closed_valves.contains(*&location) { sum } else { sum + rate})
+    }
+
+    fn check_all_paths(rates:&HashMap<String, u32>, tunnel_links: &HashMap<String, Vec::<String>>, 
                   shortest: &HashMap<(String,String),u32>, 
-                  location:String, remaining_valves: &HashSet::<String>, time_remaining:u32) -> (u32,String)  {
-        let default_branchname = "".to_string();
-        if 0 == time_remaining {
-            return (0,default_branchname);
-        }
-
-        if remaining_valves.len() == 0 {
-            (time_remaining * calculate_flow_per_step(rates.clone(), remaining_valves.clone()),
-             default_branchname)
+                  path_to_check: &Vec::<String>,
+                  location:&String, remaining_valves: &HashSet::<String>, my_start_time:u32, elephant_start_time:u32, time_remaining:u32, estimate:u32) -> u32  {
+        // Create all permutations of search paths, then search each one.
+        
+        let mut max = 0;
+        if 0 == remaining_valves.len() || estimate > time_remaining {
+//           print!("{}", estimate);
+            // We've created the search path, so now calculate the length
+            max = check_path(rates, tunnel_links, shortest, location, location, HashSet::new(), path_to_check.clone(), my_start_time, elephant_start_time, time_remaining);
         } else {
-            remaining_valves.iter().fold((0,default_branchname.to_string()), |max, d| {
-                let path = {
-                    let distance = shortest.get(&(location.clone(), d.to_string())).unwrap();
-                    let mut after_remove = remaining_valves.clone();
-                    let mut branch_names = default_branchname.to_string();
-                    if time_remaining > 0 {
-                        let step_rate = calculate_flow_per_step(rates.clone(), remaining_valves.clone());
-                        let mut branch_sum = step_rate; // Open valve time
-                        after_remove.remove(d);
-                        if time_remaining > *distance {
-                            branch_sum += step_rate * distance;
-                            let result = total_flow(rates, tunnel_links, shortest, d.to_string(), 
-                                                    &after_remove, time_remaining - distance - 1); 
-                            branch_sum += result.0;
-                            branch_names.push_str(&format!("{}\n{} {} ", 30 - time_remaining, d, step_rate)); 
-                            branch_names.push_str(&result.1); 
-                        } else {
-                            branch_sum += step_rate * (time_remaining-1);
-                        }
-                        (branch_sum, branch_names)
-                    } else {
-                        (0,branch_names)
-                    }
-                };
-                if max.0 > path.0 {
-                    (max.0, max.1)
+            for next_step in remaining_valves {
+                let new_estimate;
+                if path_to_check.len() > 0 {
+                    new_estimate = estimate + shortest.get(&(path_to_check.last().unwrap().to_string(),next_step.to_string())).unwrap()+1;
                 } else {
-                    path
+                    new_estimate = estimate;
                 }
+
+                let mut new_remaining = remaining_valves.clone();
+                new_remaining.remove(next_step); 
+                let mut new_path_to_check = path_to_check.clone();
+                new_path_to_check.push(next_step.to_string()); 
+                max = std::cmp::max(max, check_all_paths(rates, tunnel_links, shortest, &new_path_to_check, 
+                                                         location, &new_remaining, my_start_time, elephant_start_time, time_remaining, new_estimate));
+
             }
-            )
         }
+        max
     }
 
-    let flow_result = total_flow(&valve_flow_rates, &tunnel_links, &shortest_paths, 
-                                    starting_point.to_string(), &unopen_valves, 30);
+    fn check_path(rates:&HashMap<String, u32>, tunnel_links: &HashMap<String, Vec::<String>>, shortest: &HashMap<(String,String),u32>, 
+                  my_location:&String, elephant_location:&String, open_valves: HashSet::<String>, remaining_path: Vec<String>, my_time_to_next_valve: u32, elephant_time_to_next_valve:u32, time_remaining:u32) -> u32  {
+        let mut total_flow = 0;
+        if time_remaining > 0 {
+            let mut current_open:HashSet::<String>;
+            let mut my_intended_location = my_location.to_string();
+            let mut my_time_remainaing = my_time_to_next_valve;
+            let mut elephant_intended_location = elephant_location.to_string();
+            let mut elephant_time_remainaing = elephant_time_to_next_valve;
+            let mut current_remaining_path = remaining_path;
 
-    // Debug info
-    // for ((src, dst), distance) in shortest_paths {
-    //     println!("{} {} {}", src, dst, distance);
-    // }
-    // println!("{}", flow_result.1);
-    flow_result.0
+            if my_time_to_next_valve == 0 || elephant_time_to_next_valve == 0 {
+                current_open = open_valves.clone();
+                if my_time_to_next_valve == 0 {
+                    current_open.insert(my_intended_location.to_string());
+                }
+                if elephant_time_to_next_valve == 0 {
+                    current_open.insert(elephant_intended_location.to_string());
+                }
+            } else {
+                current_open = open_valves;
+            }
+            total_flow += calculate_flow_per_step_open(rates, &current_open);
+
+            if my_time_to_next_valve == 0 && current_remaining_path.len() > 0 {
+                    my_intended_location = current_remaining_path[0].to_string();
+                    current_remaining_path = current_remaining_path[1..].to_vec();
+
+                    my_time_remainaing = *shortest.get(&(my_location.clone(), my_intended_location.to_string())).unwrap();
+                    my_time_remainaing += 1; // Time to open valve.
+
+//                    // Debug
+//                    if *rates.get(&my_location.clone()).unwrap() > 0 { println!("* open {}", my_location); }
+//                    println!("me: move {} -> {} {}",my_location, my_intended_location, my_time_remainaing - 1);
+            }
+
+            if elephant_time_to_next_valve == 0 && current_remaining_path.len() > 0 {
+                    elephant_intended_location = current_remaining_path[0].to_string();
+                    current_remaining_path = current_remaining_path[1..].to_vec();
+
+                    elephant_time_remainaing = *shortest.get(&(elephant_location.clone(), elephant_intended_location.to_string())).unwrap();
+                    elephant_time_remainaing += 1; // Time to open valve.
+
+                    // Debug
+//                    if *rates.get(&elephant_location.clone()).unwrap() > 0 { println!("* open {}", elephant_location); }
+//                    println!("elephant: move {} -> {} {}",elephant_location, elephant_intended_location, elephant_time_remainaing - 1);
+            }
+
+//            println!("+ {} {} {}", my_location, total_flow, 30-time_remaining);
+            total_flow += check_path(rates, tunnel_links, shortest, &my_intended_location, &elephant_intended_location, current_open, current_remaining_path, std::cmp::max(0,my_time_remainaing as i32 - 1) as u32, std::cmp::max(0,elephant_time_remainaing as i32 - 1) as u32, time_remaining - 1);
+        }
+        total_flow
+    }
+
+    fn check_path_permute(rates:&HashMap<String, u32>, tunnel_links: &HashMap<String, Vec::<String>>, shortest: &HashMap<(&str,&str),u32>, 
+                  my_location:&String, elephant_location:&String, closed_valves: HashSet::<String>,  my_time_to_next_valve: u32, elephant_time_to_next_valve:u32, time_remaining:u32) -> u32  {
+        let mut total_flow = 0;
+        if time_remaining > 0 {
+            let mut current_closed:HashSet::<String>;
+            let mut my_intended_location = my_location.to_string();
+            let mut my_time_remainaing = my_time_to_next_valve;
+            let mut elephant_intended_location = elephant_location.to_string();
+            let mut elephant_time_remainaing = elephant_time_to_next_valve;
+
+            if my_time_to_next_valve == 0 || elephant_time_to_next_valve == 0 {
+                current_closed = closed_valves.clone();
+                if my_time_to_next_valve == 0 {
+                    current_closed.remove(&my_intended_location.to_string());
+                }
+                if elephant_time_to_next_valve == 0 {
+                    current_closed.remove(&elephant_intended_location.to_string());
+                }
+            } else {
+                current_closed = closed_valves;
+            }
+            total_flow += calculate_flow_per_step_closed(rates, &current_closed);
+
+            if my_time_to_next_valve == 0 || elephant_time_to_next_valve == 0 {
+
+                if current_closed.len() > 0 {
+                    let mut valve_pairs = HashSet::<(String,String)>::new();
+                    if my_time_to_next_valve == 0 && elephant_time_to_next_valve == 0 {
+                        //  If both need a new one, set order based on who's closest
+                        let mut elephant_checks = Vec::<String>::new();
+                        for elephant in &current_closed {
+                            if *shortest.get(&(elephant_location, elephant)).unwrap() <= time_remaining {
+                                // Only add 'reachable' valves
+                                elephant_checks.push(elephant.to_string());
+                            }
+                        }
+
+                        let mut me_checks = Vec::<String>::new();
+                        for me in &current_closed {
+                            if *shortest.get(&(my_location, me)).unwrap() <= time_remaining {
+                                // Only add 'reachable' valves
+                                me_checks.push(me.to_string());
+                            }
+                        }
+
+                        for me_pos in &me_checks{
+                            for elephant in &elephant_checks {
+                                if me_pos != elephant {
+                                    let mm = *shortest.get(&(my_location, me_pos)).unwrap();
+                                    let me = *shortest.get(&(my_location, elephant)).unwrap();
+                                    let em = *shortest.get(&(elephant_location, me_pos)).unwrap();
+                                    let ee = *shortest.get(&(elephant_location, elephant)).unwrap();
+                                    if (me <= ee) && (em <= mm) {
+                                        // If it's better to go to each others, then swap (it
+                                        // doesn't matter who switches the valve).
+                                        valve_pairs.insert((elephant.to_string(), me_pos.to_string()));
+                                    }
+                                    else {
+                                        valve_pairs.insert((me_pos.to_string(), elephant.to_string()));
+                                    }
+                                }
+                            }
+                        }
+
+                    } else if my_time_to_next_valve == 0  {
+                        for me in &current_closed {
+                            if *shortest.get(&(my_location, me)).unwrap() <= time_remaining {
+                                valve_pairs.insert((me.to_string(), elephant_intended_location.to_string()));
+                            }
+                        }
+                    } else if elephant_time_to_next_valve == 0 {
+                        for elephant in &current_closed {
+                            if *shortest.get(&(elephant_location, elephant)).unwrap() <= time_remaining {
+                                valve_pairs.insert((my_intended_location.to_string(), elephant.to_string()));
+                            }
+                        }
+                    }
+
+                    if valve_pairs.len() > 0 {
+                        let mut max_path = 0;
+                        for (me, elephant) in valve_pairs {
+                            if my_time_to_next_valve == 0 {
+                                my_time_remainaing = *shortest.get(&(my_location, &me)).unwrap();
+                                my_time_remainaing += 1; // Time to open valve.
+                            }
+
+                            if elephant_time_to_next_valve == 0 {
+                                elephant_time_remainaing = *shortest.get(&(&elephant_location, &elephant)).unwrap();
+                                elephant_time_remainaing += 1; // Time to open valve.
+                            }
+                            max_path = std::cmp::max(max_path, check_path_permute(rates, tunnel_links, shortest, &me, &elephant, current_closed.clone(), std::cmp::max(0,my_time_remainaing as i32 - 1) as u32, std::cmp::max(0,elephant_time_remainaing as i32 - 1) as u32, time_remaining - 1));
+                        }
+                        total_flow += max_path;
+                    } else {
+                            total_flow += check_path_permute(rates, tunnel_links, shortest, &my_intended_location, &elephant_intended_location, current_closed.clone(), std::cmp::max(0,my_time_remainaing as i32 - 1) as u32, std::cmp::max(0,elephant_time_remainaing as i32 - 1) as u32, time_remaining - 1);
+                    }
+                }
+                else
+                {
+                    total_flow += check_path_permute(rates, tunnel_links, shortest, &my_intended_location, &elephant_intended_location, current_closed, std::cmp::max(0,my_time_remainaing as i32 - 1) as u32, std::cmp::max(0,elephant_time_remainaing as i32 - 1) as u32, time_remaining - 1);
+                }
+
+            } else {
+
+                total_flow += check_path_permute(rates, tunnel_links, shortest, &my_intended_location, &elephant_intended_location, current_closed, std::cmp::max(0,my_time_remainaing as i32 - 1) as u32, std::cmp::max(0,elephant_time_remainaing as i32 - 1) as u32, time_remaining - 1);
+            }
+        }
+        total_flow
+    }
+
+    for ((a,b),d) in &shortest_paths {
+        println!("{} {} {}", a, b, d);
+    }
+    if !second_part {
+//        // Set the elephant's start time to '99' so it doesn't open any valves for the 'first part'
+        check_path_permute(&valve_flow_rates, &tunnel_links, &shortest_paths, &starting_point, &starting_point, unopen_valves.clone(),  0, 99, 30)
+    } else {
+        check_path_permute(&valve_flow_rates, &tunnel_links, &shortest_paths, &starting_point, &starting_point, unopen_valves.clone(),  0, 0, 26)
+    }
 }
 
 #[cfg(test)]
@@ -978,5 +1128,6 @@ mod tests {
         assert_eq!(super::call_day_func(14, true),       "24166");
         assert_eq!(super::call_day_func(15, false),      "5832528");
         assert_eq!(super::call_day_func(15, true),       "13360899249595");
+        assert_eq!(super::call_day_func(16, false),      "2359")
     }
 }
