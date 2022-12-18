@@ -48,6 +48,7 @@ fn call_day_func (day_number:u8, second_part:bool) -> String {
            14 => {format!("{}", day14(lines, second_part))},
            15 => {format!("{}", day15(lines, second_part))},
            16 => {format!("{}", day16(lines, second_part))},
+           17 => {format!("{}", day17(lines, second_part))},
             _ => {format!("Unsupported day {}", day_number)}
     }
 }
@@ -873,98 +874,8 @@ fn day16(lines:Vec<String>, second_part:bool) -> u32  {
                               shortest(&tunnel_links, &starting_point, &dst));
     }
 
-    fn calculate_flow_per_step_open(rates:&HashMap<String, u32>, open_valves: &HashSet::<String>) -> u32  {
-        rates.iter().fold(0, |sum, (location, rate)| if open_valves.contains(*&location) { sum + rate } else { sum })
-    }
-
     fn calculate_flow_per_step_closed(rates:&HashMap<String, u32>, closed_valves: &HashSet::<String>) -> u32  {
         rates.iter().fold(0, |sum, (location, rate)| if closed_valves.contains(*&location) { sum } else { sum + rate})
-    }
-
-    fn check_all_paths(rates:&HashMap<String, u32>, tunnel_links: &HashMap<String, Vec::<String>>, 
-                  shortest: &HashMap<(String,String),u32>, 
-                  path_to_check: &Vec::<String>,
-                  location:&String, remaining_valves: &HashSet::<String>, my_start_time:u32, elephant_start_time:u32, time_remaining:u32, estimate:u32) -> u32  {
-        // Create all permutations of search paths, then search each one.
-        
-        let mut max = 0;
-        if 0 == remaining_valves.len() || estimate > time_remaining {
-//           print!("{}", estimate);
-            // We've created the search path, so now calculate the length
-            max = check_path(rates, tunnel_links, shortest, location, location, HashSet::new(), path_to_check.clone(), my_start_time, elephant_start_time, time_remaining);
-        } else {
-            for next_step in remaining_valves {
-                let new_estimate;
-                if path_to_check.len() > 0 {
-                    new_estimate = estimate + shortest.get(&(path_to_check.last().unwrap().to_string(),next_step.to_string())).unwrap()+1;
-                } else {
-                    new_estimate = estimate;
-                }
-
-                let mut new_remaining = remaining_valves.clone();
-                new_remaining.remove(next_step); 
-                let mut new_path_to_check = path_to_check.clone();
-                new_path_to_check.push(next_step.to_string()); 
-                max = std::cmp::max(max, check_all_paths(rates, tunnel_links, shortest, &new_path_to_check, 
-                                                         location, &new_remaining, my_start_time, elephant_start_time, time_remaining, new_estimate));
-
-            }
-        }
-        max
-    }
-
-    fn check_path(rates:&HashMap<String, u32>, tunnel_links: &HashMap<String, Vec::<String>>, shortest: &HashMap<(String,String),u32>, 
-                  my_location:&String, elephant_location:&String, open_valves: HashSet::<String>, remaining_path: Vec<String>, my_time_to_next_valve: u32, elephant_time_to_next_valve:u32, time_remaining:u32) -> u32  {
-        let mut total_flow = 0;
-        if time_remaining > 0 {
-            let mut current_open:HashSet::<String>;
-            let mut my_intended_location = my_location.to_string();
-            let mut my_time_remainaing = my_time_to_next_valve;
-            let mut elephant_intended_location = elephant_location.to_string();
-            let mut elephant_time_remainaing = elephant_time_to_next_valve;
-            let mut current_remaining_path = remaining_path;
-
-            if my_time_to_next_valve == 0 || elephant_time_to_next_valve == 0 {
-                current_open = open_valves.clone();
-                if my_time_to_next_valve == 0 {
-                    current_open.insert(my_intended_location.to_string());
-                }
-                if elephant_time_to_next_valve == 0 {
-                    current_open.insert(elephant_intended_location.to_string());
-                }
-            } else {
-                current_open = open_valves;
-            }
-            total_flow += calculate_flow_per_step_open(rates, &current_open);
-
-            if my_time_to_next_valve == 0 && current_remaining_path.len() > 0 {
-                    my_intended_location = current_remaining_path[0].to_string();
-                    current_remaining_path = current_remaining_path[1..].to_vec();
-
-                    my_time_remainaing = *shortest.get(&(my_location.clone(), my_intended_location.to_string())).unwrap();
-                    my_time_remainaing += 1; // Time to open valve.
-
-//                    // Debug
-//                    if *rates.get(&my_location.clone()).unwrap() > 0 { println!("* open {}", my_location); }
-//                    println!("me: move {} -> {} {}",my_location, my_intended_location, my_time_remainaing - 1);
-            }
-
-            if elephant_time_to_next_valve == 0 && current_remaining_path.len() > 0 {
-                    elephant_intended_location = current_remaining_path[0].to_string();
-                    current_remaining_path = current_remaining_path[1..].to_vec();
-
-                    elephant_time_remainaing = *shortest.get(&(elephant_location.clone(), elephant_intended_location.to_string())).unwrap();
-                    elephant_time_remainaing += 1; // Time to open valve.
-
-                    // Debug
-//                    if *rates.get(&elephant_location.clone()).unwrap() > 0 { println!("* open {}", elephant_location); }
-//                    println!("elephant: move {} -> {} {}",elephant_location, elephant_intended_location, elephant_time_remainaing - 1);
-            }
-
-//            println!("+ {} {} {}", my_location, total_flow, 30-time_remaining);
-            total_flow += check_path(rates, tunnel_links, shortest, &my_intended_location, &elephant_intended_location, current_open, current_remaining_path, std::cmp::max(0,my_time_remainaing as i32 - 1) as u32, std::cmp::max(0,elephant_time_remainaing as i32 - 1) as u32, time_remaining - 1);
-        }
-        total_flow
     }
 
     fn check_path_permute(rates:&HashMap<String, u32>, tunnel_links: &HashMap<String, Vec::<String>>, shortest: &HashMap<(&str,&str),u32>, 
@@ -972,9 +883,9 @@ fn day16(lines:Vec<String>, second_part:bool) -> u32  {
         let mut total_flow = 0;
         if time_remaining > 0 {
             let mut current_closed:HashSet::<String>;
-            let mut my_intended_location = my_location.to_string();
+            let my_intended_location = my_location.to_string();
             let mut my_time_remainaing = my_time_to_next_valve;
-            let mut elephant_intended_location = elephant_location.to_string();
+            let elephant_intended_location = elephant_location.to_string();
             let mut elephant_time_remainaing = elephant_time_to_next_valve;
 
             if my_time_to_next_valve == 0 || elephant_time_to_next_valve == 0 {
@@ -991,6 +902,10 @@ fn day16(lines:Vec<String>, second_part:bool) -> u32  {
             total_flow += calculate_flow_per_step_closed(rates, &current_closed);
 
             if my_time_to_next_valve == 0 || elephant_time_to_next_valve == 0 {
+                // With 2 movements, this is where this algorithm explodes.
+                // Doing a naive approach of permutations of 'me' and 'elephant'
+                // All this code is just trying to do some additional pruning.
+                // There will be a much better way.
 
                 if current_closed.len() > 0 {
                     let mut valve_pairs = HashSet::<(String,String)>::new();
@@ -1081,11 +996,157 @@ fn day16(lines:Vec<String>, second_part:bool) -> u32  {
         println!("{} {} {}", a, b, d);
     }
     if !second_part {
-//        // Set the elephant's start time to '99' so it doesn't open any valves for the 'first part'
+        // Set the elephant's start time to '99' so it doesn't open any valves for the 'first part'
         check_path_permute(&valve_flow_rates, &tunnel_links, &shortest_paths, &starting_point, &starting_point, unopen_valves.clone(),  0, 99, 30)
     } else {
         check_path_permute(&valve_flow_rates, &tunnel_links, &shortest_paths, &starting_point, &starting_point, unopen_valves.clone(),  0, 0, 26)
     }
+}
+
+fn day17(lines:Vec<String>, second_part:bool) -> u32  {
+
+    // They start with 2 spaces on the left.
+    // ####
+    // 
+    // .#.
+    // ###
+    // .#.
+    // 
+    // ..#
+    // ..#
+    // ###
+    // 
+    // #
+    // #
+    // #
+    // #
+    // 
+    // ##
+    // ##
+
+    // Get tetris type pieces
+
+    let blocks = vec![vec![vec![1,1,1,1]],
+
+                      vec![vec![0,1,0],
+                           vec![1,1,1],
+                           vec![0,1,0]],
+
+                      vec![vec![0,0,1],
+                           vec![0,0,1],
+                           vec![1,1,1]],
+
+                      vec![vec![1],
+                           vec![1],
+                           vec![1],
+                           vec![1]],
+
+                      vec![vec![1,1],
+                           vec![1,1]]];
+
+
+
+    fn print_game_state(game_state:&Vec<Vec<i32>>) {
+        for line in game_state.iter().rev() {
+            println!("{}", line.iter().fold("".to_string(), |sum, i| format!("{}{}", sum, if *i==0 {'.'} else {'#'})));
+        }
+        println!("");
+    }
+    // Returns 'true' if the block for the given height/offset overlaps. False otherwise.
+    fn check_intersection(game_state:&Vec<Vec<i32>>, gap_width:usize, block:&Vec<Vec<i32>>, block_height:i32, block_offset:i32) -> bool
+    {
+        let mut intersects = false;
+        for y in 0..block.len() {
+            
+            // Check edges and bottom.
+            if block_offset < 0 || (block_offset + block[0].len() as i32) as usize > gap_width || (block_height + y as i32) < 0 {
+                intersects = true;
+            } else {
+                let board_index = (y as i32 + block_height) as usize;
+                if board_index < game_state.len() {
+                    for x in 0..block[block.len() - y - 1].len() {
+                        if x as i32 + block_offset < game_state[board_index].len() as i32 {
+                            if board_index < game_state.len() {
+                                if 1 == block[block.len() - y - 1][x as usize] && 1 == game_state[board_index][x + block_offset as usize] {
+                                    intersects = true;
+                                }
+                            }
+                        } else {
+                            panic!("Need to check this condition.");
+                        }
+                    }
+                }
+            }
+        }
+        intersects
+    }
+
+    #[derive(PartialEq, Clone, Copy)]
+    enum State {
+        NewBlock,
+        Jet,
+        MoveDown,
+        Stopped,
+    }
+    let mut current_game_state = State::NewBlock;
+
+    let gap_width:usize = 7;
+    let mut game_state = Vec::<Vec::<i32>>::new();
+
+    for line in lines {
+        println!("{}", line.len());
+        // Start with a 'floor'
+        let mut current_block = blocks[0].clone();
+        let mut x_offset:i32 = 2; 
+        let mut movement = line.chars().cycle(); // Characters should go forever
+
+        for current_block_number in 0..2022 {
+            let mut block_height = game_state.len() + 3;
+
+            while current_game_state != State::Stopped {
+                match current_game_state { 
+                    State::NewBlock => {current_block = blocks[current_block_number % blocks.len()].clone();
+                        x_offset = 2; // Blocks start 2 to the right. 
+                        current_game_state = State::Jet;
+                    },
+                    State::Jet => {
+                        let next_move = movement.next().unwrap();
+                        print!("{}", next_move);
+                        let next_offset = if next_move == '>' {1} else {-1};
+                        if false == check_intersection(&game_state, gap_width, &current_block, block_height as i32, x_offset + next_offset) {
+                            x_offset += next_offset;
+                        }
+                        current_game_state = State::MoveDown;
+                    },
+                    State::MoveDown => {
+                        if check_intersection(&game_state, gap_width, &current_block, block_height as i32 - 1, x_offset) {
+                            current_game_state = State::Stopped;
+                        } else {
+                            block_height -= 1;
+                            current_game_state = State::Jet;
+                        }
+                    },
+                    State::Stopped => {;},
+                }
+            }
+
+            // Store the block
+            for y in 0..current_block.len() {
+                let game_height = y + block_height as usize;
+                if game_height >= game_state.len() {
+                    game_state.insert(game_height, vec![0;gap_width]);
+                }
+
+                for x in 0..current_block[current_block.len() - y - 1].len() {
+                    game_state[game_height][x + x_offset as usize] = current_block[current_block.len() - y - 1][x];
+                }
+            }
+            current_game_state = State::NewBlock;
+        }
+    }
+    print_game_state(&game_state);
+
+    game_state.len() as u32
 }
 
 #[cfg(test)]
@@ -1128,6 +1189,8 @@ mod tests {
         assert_eq!(super::call_day_func(14, true),       "24166");
         assert_eq!(super::call_day_func(15, false),      "5832528");
         assert_eq!(super::call_day_func(15, true),       "13360899249595");
-        assert_eq!(super::call_day_func(16, false),      "2359")
+        assert_eq!(super::call_day_func(16, false),      "2359");
+        // assert_eq!(super::call_day_func(16, true),      "2999") // With current algorithm take ~45min in release
+        assert_eq!(super::call_day_func(17, false),      "?????"); // 3145 & 3142 are both too high?(although test input matches).
     }
 }
