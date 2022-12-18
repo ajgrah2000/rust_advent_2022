@@ -1003,7 +1003,7 @@ fn day16(lines:Vec<String>, second_part:bool) -> u32  {
     }
 }
 
-fn day17(lines:Vec<String>, second_part:bool) -> u32  {
+fn day17(lines:Vec<String>, second_part:bool) -> u64  {
 
     // They start with 2 spaces on the left.
     // ####
@@ -1093,14 +1093,16 @@ fn day17(lines:Vec<String>, second_part:bool) -> u32  {
     let gap_width:usize = 7;
     let mut game_state = Vec::<Vec::<i32>>::new();
 
+    let mut block_height_pairs = Vec::<(usize, usize)>::new();
+
     for line in lines {
-        println!("{}", line.len());
         // Start with a 'floor'
         let mut current_block = blocks[0].clone();
         let mut x_offset:i32 = 2; 
         let mut movement = line.chars().cycle(); // Characters should go forever
 
-        for current_block_number in 0..2022 {
+        let blocks_to_test = if second_part {10000} else {2022};        
+        for current_block_number in 0..blocks_to_test {
             let mut block_height = game_state.len() + 3;
 
             while current_game_state != State::Stopped {
@@ -1111,8 +1113,7 @@ fn day17(lines:Vec<String>, second_part:bool) -> u32  {
                     },
                     State::Jet => {
                         let next_move = movement.next().unwrap();
-                        print!("{}", next_move);
-                        let next_offset = if next_move == '>' {1} else {-1};
+                        let next_offset = match next_move { '>' => {1}, '<' => {-1}, _ => {panic!("blah");}};
                         if false == check_intersection(&game_state, gap_width, &current_block, block_height as i32, x_offset + next_offset) {
                             x_offset += next_offset;
                         }
@@ -1126,7 +1127,7 @@ fn day17(lines:Vec<String>, second_part:bool) -> u32  {
                             current_game_state = State::Jet;
                         }
                     },
-                    State::Stopped => {;},
+                    State::Stopped => {()},
                 }
             }
 
@@ -1138,15 +1139,56 @@ fn day17(lines:Vec<String>, second_part:bool) -> u32  {
                 }
 
                 for x in 0..current_block[current_block.len() - y - 1].len() {
-                    game_state[game_height][x + x_offset as usize] = current_block[current_block.len() - y - 1][x];
+                    game_state[game_height][x + x_offset as usize] |= current_block[current_block.len() - y - 1][x];
                 }
             }
+            block_height_pairs.push((current_block_number, game_state.len())); 
             current_game_state = State::NewBlock;
         }
     }
-    print_game_state(&game_state);
 
-    game_state.len() as u32
+
+    if second_part {
+        // Find a location where the sequence of height changes repeats.
+        // Get an arbitrary string (long enough to have confidence that it's unique)
+        // Find a subsequent location of the string.
+        // Find offsets that line up with the 'final block number', query for the hight at that
+        // point.
+        // Use the calculated deltas to determine what the result would be at the final block.
+        let mut sequence = Vec::<usize>::new();
+        let mut last = 0;
+        for block_height in &block_height_pairs {
+            sequence.push(block_height.1 - last);
+            last = block_height.1;
+        }
+
+        let search_offset = 443;
+        let search_size = 500; // Arbitrary, just needs to be smaller than the repetition, but big enough for confidence.
+        let search_splice = sequence[search_offset..(search_offset+search_size)].to_vec();
+
+        let mut next_match = search_offset + 1;
+        next_match =  next_match + sequence[next_match..].windows(search_splice.len()).position(|window| window == search_splice).unwrap();
+
+        let last_block_number:u64 = 1000000000000;
+        let sequence_repetition_length = (next_match - search_offset) as u64;
+        let starting_point = last_block_number as u64 % sequence_repetition_length as u64;
+
+        // 'block 1' is at index '0'
+        let base_height = *&block_height_pairs[starting_point as usize - 1].1 as u64;
+        let repetition_height_increment = (&block_height_pairs[(starting_point + 2 * sequence_repetition_length)  as usize - 1].1 - 
+                                           &block_height_pairs[(starting_point + sequence_repetition_length)  as usize - 1].1) as u64;
+
+        // Manual runs:
+        // 318 @ 200
+        // 2941 @ 1900
+        // 5564 @ 3600 
+        // 1542941176480
+        println!("{} {} {} {}", last_block_number, sequence_repetition_length, repetition_height_increment , base_height);
+        (((last_block_number as u64 / sequence_repetition_length as u64) * repetition_height_increment) + base_height) as u64
+
+    } else {
+        game_state.len() as u64
+    }
 }
 
 #[cfg(test)]
@@ -1190,7 +1232,8 @@ mod tests {
         assert_eq!(super::call_day_func(15, false),      "5832528");
         assert_eq!(super::call_day_func(15, true),       "13360899249595");
         assert_eq!(super::call_day_func(16, false),      "2359");
-        // assert_eq!(super::call_day_func(16, true),      "2999") // With current algorithm take ~45min in release
-        assert_eq!(super::call_day_func(17, false),      "?????"); // 3145 & 3142 are both too high?(although test input matches).
+        // assert_eq!(super::call_day_func(16, true),      "2999"); // With current algorithm take ~45min in release
+        assert_eq!(super::call_day_func(17, false),      "3127");
+        assert_eq!(super::call_day_func(17, true),      "1542941176480");
     }
 }
