@@ -49,6 +49,7 @@ fn call_day_func (day_number:u8, second_part:bool) -> String {
            15 => {format!("{}", day15(lines, second_part))},
            16 => {format!("{}", day16(lines, second_part))},
            17 => {format!("{}", day17(lines, second_part))},
+           18 => {format!("{}", day18(lines, second_part))},
             _ => {format!("Unsupported day {}", day_number)}
     }
 }
@@ -1191,49 +1192,132 @@ fn day17(lines:Vec<String>, second_part:bool) -> u64  {
     }
 }
 
+fn day18(lines:Vec<String>, second_part:bool) -> u64  {
+    let mut split_ints = Vec::new();
+    for line in lines {
+        split_ints.push(line.split(",").map(|l| l.parse::<i32>().unwrap()).collect::<Vec<i32>>());
+    }
+    let mut lava_points = HashSet::new();
+    let (mut maxx,mut maxy,mut maxz) = (0,0,0);
+    for position in &split_ints {
+        // Offsetting the points, so there are no zeros
+        let new_point = (position[0]+1, position[1]+1, position[2]+1);
+        maxx = std::cmp::max(maxx, new_point.0+1);
+        maxy = std::cmp::max(maxy, new_point.1+1);
+        maxz = std::cmp::max(maxz, new_point.2+1);
+        lava_points.insert(new_point);
+    }
+    let touching = |a:&(i32,i32,i32),b:&(i32,i32,i32)| { if (a.0 == b.0 && a.1 == b.1 && (a.2 - b.2).abs() == 1) ||
+        (a.0 == b.0 && (a.1 - b.1).abs() == 1 && a.2 == b.2) ||
+            ((a.0 - b.0).abs() == 1 && a.1 == b.1 && a.2 == b.2) 
+            { true } else { false }};
+
+    if !second_part {
+        let mut total_sides = 6 * split_ints.len();
+        for cube in &lava_points {
+            total_sides -= &lava_points.iter().filter(|x| touching(*x,cube)).count();
+        }
+        total_sides as u64
+    } else {
+        // Input, next set of 'air' points to check.
+        // Output, new set of 'air' points and number of touching lava cubes.
+        // Finish when there are no new 'air' points.
+        fn increment_flood_fill(flooded: &mut HashSet::<(i32,i32,i32)>, 
+                                lava_points: &HashSet::<(i32,i32,i32)>, 
+                                search_points: &HashSet::<(i32,i32,i32)>,
+                                max:(i32,i32,i32)) -> (HashSet::<(i32,i32,i32)>, u32) {
+            let mut new_search_points = HashSet::<(i32,i32,i32)>::new();
+            let offsets:Vec::<(i32,i32,i32)> = vec![(0,0,1), ( 0, 0,-1), 
+                                                    (0,1,0), ( 0,-1, 0),
+                                                    (1,0,0), (-1, 0, 0)];
+
+            let apply_offset = |point:(i32,i32,i32), offset:(i32,i32,i32)| {((point.0 + offset.0), 
+                                                                             (point.1 + offset.1),
+                                                                             (point.2 + offset.2))};
+
+            let mut lava_surfaces = 0;
+            for look in search_points.iter() {
+                for offset in offsets.iter() {
+                    let check_point = apply_offset(*look, *offset);
+                    if lava_points.contains(&check_point) {
+                        lava_surfaces += 1;
+                    } else if flooded.contains(&check_point) {
+                        // Don't do anything.
+                    } else {
+                        if check_point.0 <= max.0 && check_point.1 <= max.1 && check_point.2 <= max.2
+                           && check_point.0 >= 0 && check_point.1 >= 0 && check_point.2 >= 0
+                        {
+                            new_search_points.insert(check_point);
+                        }
+                    }
+                }
+                // Add the point to 'flooded' so it isn't checked again.
+                flooded.insert(*look);
+            }
+            (new_search_points, lava_surfaces)
+        }
+
+        let mut flooded = HashSet::new();
+        let mut search_points = HashSet::new();
+        let mut last_lava_touch_count = 0;
+        let mut total_lava_surface = 0;
+        flooded.insert((0,0,0));
+        search_points.insert((0,0,0));
+
+        while search_points.len() != 0 {
+            (search_points, last_lava_touch_count) = increment_flood_fill(&mut flooded, &lava_points, &search_points, (maxx, maxy, maxz));
+            total_lava_surface += last_lava_touch_count;
+        }
+
+        total_lava_surface as u64
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
     fn test_days() {
         // Results are specific to the specific input files stored in the repo.
-        assert_eq!(super::call_day_func(1, false),     "71934");
-        assert_eq!(super::call_day_func(1, true),     "211447");
-        assert_eq!(super::call_day_func(2, false),     "13268");
-        assert_eq!(super::call_day_func(2, true),      "15508");
-        assert_eq!(super::call_day_func(3, false),      "8109");
-        assert_eq!(super::call_day_func(3, true),       "2738");
-        assert_eq!(super::call_day_func(4, false),       "507");
-        assert_eq!(super::call_day_func(4, true),        "897");
-        assert_eq!(super::call_day_func(5, false), "TQRFCBSJJ");
-        assert_eq!(super::call_day_func(5, true),  "RMHFJNVFP");
-        assert_eq!(super::call_day_func(6, false),      "1134");
-        assert_eq!(super::call_day_func(6, true),       "2263");
-        assert_eq!(super::call_day_func(7, false),    "919137");
-        assert_eq!(super::call_day_func(7, true),    "2877389");
-        assert_eq!(super::call_day_func(8, false),      "1798");
-        assert_eq!(super::call_day_func(8, true),     "259308");
-        assert_eq!(super::call_day_func(9, false),      "6236");
-        assert_eq!(super::call_day_func(9, true),      "2449");
-        assert_eq!(super::call_day_func(10, false),    "11960");
-        assert_eq!(super::call_day_func(10, true),     "\n####...##..##..####.###...##..#....#..#.\n\
-                                                          #.......#.#..#.#....#..#.#..#.#....#..#.\n\
-                                                          ###.....#.#....###..#..#.#....#....####.\n\
-                                                          #.......#.#....#....###..#.##.#....#..#.\n\
-                                                          #....#..#.#..#.#....#....#..#.#....#..#.\n\
-                                                          ####..##...##..#....#.....###.####.#..#.");
-        assert_eq!(super::call_day_func(11, false),    "61503");
-        assert_eq!(super::call_day_func(11, true), "14081365540");
-        assert_eq!(super::call_day_func(12, false),      "440");
-        assert_eq!(super::call_day_func(12, true),       "439");
-        assert_eq!(super::call_day_func(13, false),      "6568");
-        assert_eq!(super::call_day_func(13, true),       "19493");
-        assert_eq!(super::call_day_func(14, false),      "793");
-        assert_eq!(super::call_day_func(14, true),       "24166");
-        assert_eq!(super::call_day_func(15, false),      "5832528");
-        assert_eq!(super::call_day_func(15, true),       "13360899249595");
-        assert_eq!(super::call_day_func(16, false),      "2359");
+        assert_eq!(super::call_day_func(1, false),          "71934");
+        assert_eq!(super::call_day_func(1, true),          "211447");
+        assert_eq!(super::call_day_func(2, false),          "13268");
+        assert_eq!(super::call_day_func(2, true),           "15508");
+        assert_eq!(super::call_day_func(3, false),           "8109");
+        assert_eq!(super::call_day_func(3, true),            "2738");
+        assert_eq!(super::call_day_func(4, false),            "507");
+        assert_eq!(super::call_day_func(4, true),             "897");
+        assert_eq!(super::call_day_func(5, false),      "TQRFCBSJJ");
+        assert_eq!(super::call_day_func(5, true),       "RMHFJNVFP");
+        assert_eq!(super::call_day_func(6, false),           "1134");
+        assert_eq!(super::call_day_func(6, true),            "2263");
+        assert_eq!(super::call_day_func(7, false),         "919137");
+        assert_eq!(super::call_day_func(7, true),         "2877389");
+        assert_eq!(super::call_day_func(8, false),           "1798");
+        assert_eq!(super::call_day_func(8, true),          "259308");
+        assert_eq!(super::call_day_func(9, false),           "6236");
+        assert_eq!(super::call_day_func(9, true),           "2449");
+        assert_eq!(super::call_day_func(10, false),         "11960");
+        assert_eq!(super::call_day_func(10, true),          "\n####...##..##..####.###...##..#....#..#.\n\
+                                                               #.......#.#..#.#....#..#.#..#.#....#..#.\n\
+                                                               ###.....#.#....###..#..#.#....#....####.\n\
+                                                               #.......#.#....#....###..#.##.#....#..#.\n\
+                                                               #....#..#.#..#.#....#....#..#.#....#..#.\n\
+                                                               ####..##...##..#....#.....###.####.#..#.");
+        assert_eq!(super::call_day_func(11, false),         "61503");
+        assert_eq!(super::call_day_func(11, true),    "14081365540");
+        assert_eq!(super::call_day_func(12, false),           "440");
+        assert_eq!(super::call_day_func(12, true),            "439");
+        assert_eq!(super::call_day_func(13, false),          "6568");
+        assert_eq!(super::call_day_func(13, true),          "19493");
+        assert_eq!(super::call_day_func(14, false),           "793");
+        assert_eq!(super::call_day_func(14, true),          "24166");
+        assert_eq!(super::call_day_func(15, false),       "5832528");
+        assert_eq!(super::call_day_func(15, true), "13360899249595");
+        assert_eq!(super::call_day_func(16, false),          "2359");
         // assert_eq!(super::call_day_func(16, true),      "2999"); // With current algorithm take ~45min in release
-        assert_eq!(super::call_day_func(17, false),      "3127");
-        assert_eq!(super::call_day_func(17, true),      "1542941176480");
+        assert_eq!(super::call_day_func(17, false),          "3127");
+        assert_eq!(super::call_day_func(17, true),  "1542941176480");
+        assert_eq!(super::call_day_func(18, false),          "4242");
+        assert_eq!(super::call_day_func(18, true),           "2428");
     }
 }
