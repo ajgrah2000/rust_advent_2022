@@ -17,16 +17,21 @@ struct AdventArgs {
     /// run the second part for the day.
     #[argh(switch, short='s')]
     second_part: bool,
+
+    /// run the sample for the day.
+    #[argh(switch, short='S')]
+    sample: bool,
 }
 
 fn main() {
     let args:AdventArgs = argh::from_env();
 
-    println!("day {}: {}", args.day_number, call_day_func(args.day_number, args.second_part));
+    println!("day {}: {}", args.day_number, call_day_func(args.day_number, args.second_part, args.sample));
 }
 
-fn call_day_func (day_number:u8, second_part:bool) -> String {
-    let inputfile = format!("day{}_input.txt", day_number);
+fn call_day_func (day_number:u8, second_part:bool, sample:bool) -> String {
+    let inputfile = format!("day{}_{}input.txt", day_number, 
+                            if sample {"sample_"} else {""});
 
     let buf_read = BufReader::new(File::open(inputfile).expect("file not found!"));
     let lines = buf_read.lines().map(|x| x.unwrap()).collect();
@@ -46,10 +51,11 @@ fn call_day_func (day_number:u8, second_part:bool) -> String {
            12 => {format!("{}", day12(lines, second_part))},
            13 => {format!("{}", day13(lines, second_part))},
            14 => {format!("{}", day14(lines, second_part))},
-           15 => {format!("{}", day15(lines, second_part))},
+           15 => {format!("{}", day15(lines, second_part, sample))},
            16 => {format!("{}", day16(lines, second_part))},
            17 => {format!("{}", day17(lines, second_part))},
            18 => {format!("{}", day18(lines, second_part))},
+           19 => {format!("{}", day19(lines, second_part))},
             _ => {format!("Unsupported day {}", day_number)}
     }
 }
@@ -742,7 +748,7 @@ fn day14(lines:Vec<String>, second_part:bool) -> u32  {
     grains
 }
 
-fn day15(lines:Vec<String>, second_part:bool) -> u64  {
+fn day15(lines:Vec<String>, second_part:bool, sample:bool) -> u64  {
 
     let mut info = Vec::<(i32,i32,i32,i32)>::new();
     let mut beacon_positions = HashSet::<(i32,i32)>::new();
@@ -772,7 +778,7 @@ fn day15(lines:Vec<String>, second_part:bool) -> u64  {
         let maxx = sensor_beacon_distance.iter().fold(0,|s, (sx,_sy,distance)| std::cmp::max(s, *sx + (*distance as i32)));
 
         for x in minx..=maxx {
-            let y = 2000000; // Search row for sample input is '10'
+            let y = if !sample{2000000} else {10}; // Search row for sample input is '10'
             let test_position = (x, y);
             if sensor_beacon_distance.iter().any(|sbd| {no_beacon(*sbd, test_position)})
                 && !beacon_positions.contains(&test_position) {
@@ -794,7 +800,7 @@ fn day15(lines:Vec<String>, second_part:bool) -> u64  {
             }
         }
 
-        let max_search_area = 4000000; // Search area for sample input is '20'
+        let max_search_area = if !sample{4000000} else {20}; // Search area for sample input is '20'
         for test_position in test_positions.iter().filter(|(x,y)| {0..=max_search_area}.contains(x) && {0..=max_search_area}.contains(y) ) {
             if sensor_beacon_distance.iter().all(|sbd| {!no_beacon(*sbd, *test_position)})
                 && !beacon_positions.contains(&test_position) {
@@ -1259,7 +1265,7 @@ fn day18(lines:Vec<String>, second_part:bool) -> u64  {
 
         let mut flooded = HashSet::new();
         let mut search_points = HashSet::new();
-        let mut last_lava_touch_count = 0;
+        let mut last_lava_touch_count;
         let mut total_lava_surface = 0;
         flooded.insert((0,0,0));
         search_points.insert((0,0,0));
@@ -1273,51 +1279,85 @@ fn day18(lines:Vec<String>, second_part:bool) -> u64  {
     }
 }
 
+fn day19(lines:Vec<String>, second_part:bool) -> u64  {
+    // Pick a blueprint
+    // ore, clay, obsidian
+    // Number of opened geodes after 24 minutes 
+    //
+    // 1 ore collecting robuts
+    //
+    // each robot can colect 1 of its resource type per minut
+    // 1 minute for each robot of it's time to collect a resource 
+    // 1 minute for to construct any robot, and consumes resource at start of construction
+    //
+    // Can only use 1 blueprint 
+    //
+    
+
+    // Goal, most geodes in 24 minutes
+    
+//    let blueprint = Vec::new();
+    0
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
     fn test_days() {
         // Results are specific to the specific input files stored in the repo.
-        assert_eq!(super::call_day_func(1, false),          "71934");
-        assert_eq!(super::call_day_func(1, true),          "211447");
-        assert_eq!(super::call_day_func(2, false),          "13268");
-        assert_eq!(super::call_day_func(2, true),           "15508");
-        assert_eq!(super::call_day_func(3, false),           "8109");
-        assert_eq!(super::call_day_func(3, true),            "2738");
-        assert_eq!(super::call_day_func(4, false),            "507");
-        assert_eq!(super::call_day_func(4, true),             "897");
-        assert_eq!(super::call_day_func(5, false),      "TQRFCBSJJ");
-        assert_eq!(super::call_day_func(5, true),       "RMHFJNVFP");
-        assert_eq!(super::call_day_func(6, false),           "1134");
-        assert_eq!(super::call_day_func(6, true),            "2263");
-        assert_eq!(super::call_day_func(7, false),         "919137");
-        assert_eq!(super::call_day_func(7, true),         "2877389");
-        assert_eq!(super::call_day_func(8, false),           "1798");
-        assert_eq!(super::call_day_func(8, true),          "259308");
-        assert_eq!(super::call_day_func(9, false),           "6236");
-        assert_eq!(super::call_day_func(9, true),           "2449");
-        assert_eq!(super::call_day_func(10, false),         "11960");
-        assert_eq!(super::call_day_func(10, true),          "\n####...##..##..####.###...##..#....#..#.\n\
+        assert_eq!(super::call_day_func( 1, false, false),          "71934");
+        assert_eq!(super::call_day_func( 1,  true, false),         "211447");
+        assert_eq!(super::call_day_func( 2, false, false),          "13268");
+        assert_eq!(super::call_day_func( 2,  true, false),          "15508");
+        assert_eq!(super::call_day_func( 3, false, false),           "8109");
+        assert_eq!(super::call_day_func( 3,  true, false),           "2738");
+        assert_eq!(super::call_day_func( 4, false, false),            "507");
+        assert_eq!(super::call_day_func( 4,  true, false),            "897");
+        assert_eq!(super::call_day_func( 5, false, false),      "TQRFCBSJJ");
+        assert_eq!(super::call_day_func( 5,  true, false),      "RMHFJNVFP");
+        assert_eq!(super::call_day_func( 6, false, false),           "1134");
+        assert_eq!(super::call_day_func( 6,  true, false),           "2263");
+        assert_eq!(super::call_day_func( 7, false, false),         "919137");
+        assert_eq!(super::call_day_func( 7,  true, false),        "2877389");
+        assert_eq!(super::call_day_func( 8, false, false),           "1798");
+        assert_eq!(super::call_day_func( 8,  true, false),         "259308");
+        assert_eq!(super::call_day_func( 9, false, false),           "6236");
+        assert_eq!(super::call_day_func( 9,  true, false),           "2449");
+        assert_eq!(super::call_day_func(10, false, false),          "11960");
+        assert_eq!(super::call_day_func(10,  true, false),  "\n####...##..##..####.###...##..#....#..#.\n\
                                                                #.......#.#..#.#....#..#.#..#.#....#..#.\n\
                                                                ###.....#.#....###..#..#.#....#....####.\n\
                                                                #.......#.#....#....###..#.##.#....#..#.\n\
                                                                #....#..#.#..#.#....#....#..#.#....#..#.\n\
                                                                ####..##...##..#....#.....###.####.#..#.");
-        assert_eq!(super::call_day_func(11, false),         "61503");
-        assert_eq!(super::call_day_func(11, true),    "14081365540");
-        assert_eq!(super::call_day_func(12, false),           "440");
-        assert_eq!(super::call_day_func(12, true),            "439");
-        assert_eq!(super::call_day_func(13, false),          "6568");
-        assert_eq!(super::call_day_func(13, true),          "19493");
-        assert_eq!(super::call_day_func(14, false),           "793");
-        assert_eq!(super::call_day_func(14, true),          "24166");
-        assert_eq!(super::call_day_func(15, false),       "5832528");
-        assert_eq!(super::call_day_func(15, true), "13360899249595");
-        assert_eq!(super::call_day_func(16, false),          "2359");
-        // assert_eq!(super::call_day_func(16, true),      "2999"); // With current algorithm take ~45min in release
-        assert_eq!(super::call_day_func(17, false),          "3127");
-        assert_eq!(super::call_day_func(17, true),  "1542941176480");
-        assert_eq!(super::call_day_func(18, false),          "4242");
-        assert_eq!(super::call_day_func(18, true),           "2428");
+        assert_eq!(super::call_day_func(11, false, false),          "61503");
+        assert_eq!(super::call_day_func(11,  true, false),    "14081365540");
+        assert_eq!(super::call_day_func(12, false, false),            "440");
+        assert_eq!(super::call_day_func(12,  true, false),            "439");
+
+        assert_eq!(super::call_day_func(13, false,  true),             "13");
+        assert_eq!(super::call_day_func(13, false, false),           "6568");
+        assert_eq!(super::call_day_func(13,  true,  true),            "140");
+        assert_eq!(super::call_day_func(13,  true, false),          "19493");
+        assert_eq!(super::call_day_func(14, false,  true),             "24");
+        assert_eq!(super::call_day_func(14, false, false),            "793");
+        assert_eq!(super::call_day_func(14,  true,  true),             "93");
+        assert_eq!(super::call_day_func(14,  true, false),          "24166");
+        assert_eq!(super::call_day_func(15, false,  true),             "26");
+        assert_eq!(super::call_day_func(15, false, false),        "5832528");
+        assert_eq!(super::call_day_func(15,  true,  true),       "56000011");
+        assert_eq!(super::call_day_func(15,  true, false), "13360899249595");
+        assert_eq!(super::call_day_func(16, false,  true),           "1651");
+        assert_eq!(super::call_day_func(16, false, false),           "2359");
+        assert_eq!(super::call_day_func(16,  true,  true),           "1707");
+        // assert_eq!(super::call_day_func(16,  true, false),      "2999"); // With current algorithm take ~45min in release
+        assert_eq!(super::call_day_func(17, false,  true),           "3068");
+        assert_eq!(super::call_day_func(17, false, false),           "3127");
+        assert_eq!(super::call_day_func(17,  true,  true),  "1514285714288");
+        assert_eq!(super::call_day_func(17,  true, false),  "1542941176480");
+        assert_eq!(super::call_day_func(18, false, false),           "4242");
+        assert_eq!(super::call_day_func(18, false,  true),             "64");
+        assert_eq!(super::call_day_func(18,  true, false),           "2428");
+        assert_eq!(super::call_day_func(18,  true,  true),             "58");
     }
 }
