@@ -56,6 +56,7 @@ fn call_day_func (day_number:u8, second_part:bool, sample:bool) -> String {
            17 => {format!("{}", day17(lines, second_part))},
            18 => {format!("{}", day18(lines, second_part))},
            19 => {format!("{}", day19(lines, second_part))},
+           20 => {format!("{}", day20(lines, second_part))},
             _ => {format!("Unsupported day {}", day_number)}
     }
 }
@@ -1296,9 +1297,9 @@ fn day19(lines:Vec<String>, second_part:bool) -> u32  {
     
     // Goal, most geodes in 24 minutes
     let mut all_blueprints = Vec::new();
-    for (index, line) in lines.iter().enumerate() {
+    for (_index, line) in lines.iter().enumerate() {
         // Assume 1 blueprint per line
-        let mut numbers = line.chars()
+        let numbers = line.chars()
                               .filter(|x| !(x.is_alphabetic() || *x == '.' || *x == ':'))
                               .collect::<String>()
                               .split_whitespace()
@@ -1325,7 +1326,7 @@ fn day19(lines:Vec<String>, second_part:bool) -> u32  {
             resources[Robot::Geode as usize]
         } else {
             // Get the newly mined resources from previous robots.
-            let mut new_resources = std::iter::zip(active_robots, resources).map(|(a,b)| a+b).collect::<Vec<u32>>();
+            let new_resources = std::iter::zip(active_robots, resources).map(|(a,b)| a+b).collect::<Vec<u32>>();
 
             // Start with max if no robots are built.
             let mut max = find_max_geods(blueprints, &active_robots, &new_resources, time_left-1);
@@ -1372,7 +1373,7 @@ fn day19(lines:Vec<String>, second_part:bool) -> u32  {
             false
         } else {
             // Get the newly mined resources from previous robots.
-            let mut new_resources = std::iter::zip(active_robots, resources).map(|(a,b)| a+b).collect::<Vec<u32>>();
+            let new_resources = std::iter::zip(active_robots, resources).map(|(a,b)| a+b).collect::<Vec<u32>>();
 
             // Start with max if no robots are built.
             active_match = shortest_path_to_regular_obsidian(blueprints, &active_robots, &new_resources, time_left-1);
@@ -1439,6 +1440,36 @@ fn day19(lines:Vec<String>, second_part:bool) -> u32  {
     quality
 }
 
+fn day20(lines:Vec<String>, second_part:bool) -> i64  {
+    let mut code = Vec::new();
+    let (multiplier, num_cycles) = if second_part {(811589153,10)} else {(1,1)};
+
+    for (i, line) in lines.iter().enumerate() {
+        code.push((i, line.parse::<i64>().unwrap() * multiplier));
+    }
+
+    let mut new_code = Vec::new();
+    for _cycle in 0..num_cycles {
+        new_code = code.clone();
+        for i in 0..code.len() {
+            let current_position = new_code.iter().position(|(original_index,_v)| *original_index == i).unwrap(); 
+            let (original_index, value) = new_code[current_position];
+            new_code.remove(current_position);
+            let new_position = ((((current_position as i64 + value) as i64) % new_code.len() as i64) + new_code.len() as i64) % new_code.len() as i64;
+            new_code.insert(new_position as usize, (original_index, value));
+        }
+        code = new_code.clone();
+    }
+
+    let mut result:i64 = 0;
+    let zero_pos = new_code.iter().position(|(_original_index,v)| *v == 0).unwrap(); 
+    for search_index in vec![1000, 2000, 3000].iter() {
+        result += new_code[(zero_pos + search_index) % new_code.len()].1;
+    }
+    println!("{}", (((-13) % 6) + 6) % 6);
+    result as i64
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -1496,9 +1527,14 @@ mod tests {
         assert_eq!(super::call_day_func(17, false, false),           "3127");
         assert_eq!(super::call_day_func(17,  true,  true),  "1514285714288");
         assert_eq!(super::call_day_func(17,  true, false),  "1542941176480");
-        assert_eq!(super::call_day_func(18, false, false),           "4242");
         assert_eq!(super::call_day_func(18, false,  true),             "64");
-        assert_eq!(super::call_day_func(18,  true, false),           "2428");
+        assert_eq!(super::call_day_func(18, false, false),           "4242");
         assert_eq!(super::call_day_func(18,  true,  true),             "58");
+        assert_eq!(super::call_day_func(18,  true, false),           "2428");
+
+        assert_eq!(super::call_day_func(20, false,  true),              "3");
+        assert_eq!(super::call_day_func(20, false, false),           "3472");
+        assert_eq!(super::call_day_func(20,  true,  true),     "1623178306");
+        assert_eq!(super::call_day_func(20,  true, false),  "7496649006261");
     }
 }
