@@ -57,6 +57,7 @@ fn call_day_func (day_number:u8, second_part:bool, sample:bool) -> String {
            18 => {format!("{}", day18(lines, second_part))},
            19 => {format!("{}", day19(lines, second_part))},
            20 => {format!("{}", day20(lines, second_part))},
+           21 => {format!("{}", day21(lines, second_part))},
             _ => {format!("Unsupported day {}", day_number)}
     }
 }
@@ -1466,8 +1467,87 @@ fn day20(lines:Vec<String>, second_part:bool) -> i64  {
     for search_index in vec![1000, 2000, 3000].iter() {
         result += new_code[(zero_pos + search_index) % new_code.len()].1;
     }
-    println!("{}", (((-13) % 6) + 6) % 6);
     result as i64
+}
+
+fn day21(lines:Vec<String>, second_part:bool) -> i64  {
+
+    let mut lookup = HashMap::new();
+    for line in lines.iter() {
+        let elements = line.split(": ").collect::<Vec<&str>>();
+        lookup.insert(elements[0], elements[1]);
+    }
+
+    fn resolve_values(lookup:&HashMap::<&str,&str>, current_node:&str) -> i64 {
+        let value = lookup.get(current_node).unwrap();
+        let args = value.split(" ").collect::<Vec<&str>>(); 
+        if args.len() > 1 {
+            let a = resolve_values(lookup, args[0]);
+            let b = resolve_values(lookup, args[2]);
+            match value {
+                v if v.contains("+") => { a + b },
+                v if v.contains("-") => { a - b },
+                v if v.contains("*") => { a * b },
+                v if v.contains("/") => { a / b },
+                _ => {panic!("Unexpected line: {}", value)}
+            }
+        } else {
+            value.parse::<i64>().unwrap()
+        }
+    }
+
+    fn resolve_inverse(lookup:&HashMap::<&str,&str>, lines: &Vec<String>, current_node:&str) -> i64 {
+        // Find the line that contains the node on the right
+        let position = lines.iter().position(|l| {
+            let right = l.chars().position(|c| c ==':').unwrap();
+            l[right..].contains(current_node)}).unwrap();
+
+        let elements = lines[position].split(": ").collect::<Vec<&str>>();
+        let args = elements[1].split(" ").collect::<Vec<&str>>(); 
+
+        let node_on_left = current_node == args[0];
+
+        let b = if node_on_left {
+            resolve_values(lookup, args[2])
+        } else {
+            resolve_values(lookup, args[0])
+        };
+
+        if elements[0] != "root" {
+            let a = resolve_inverse(lookup, lines, elements[0]);
+
+            // length of args should always be > 1
+            // If the line we're trying to find is 'root', then just return the 'other' side.
+
+            if node_on_left {
+                // If the current node is on the left, of the operation
+                match elements[1] {
+                    v if v.contains("+") => { a - b },
+                    v if v.contains("-") => { a + b },
+                    v if v.contains("*") => { a / b },
+                    v if v.contains("/") => { a * b },
+                    _ => {panic!("")}
+                }
+            } else {
+                // If the current node is on the right, of the operation
+                match elements[1] {
+                    v if v.contains("+") => { a - b },
+                    v if v.contains("-") => { b - a },
+                    v if v.contains("*") => { a / b },
+                    v if v.contains("/") => { b / a },
+                    _ => {panic!("")}
+                }
+            } 
+        } else {
+            b
+        }
+    }
+
+    if !second_part {
+        resolve_values(&lookup, "root")
+    } else {
+        resolve_inverse(&lookup, &lines, "humn")
+    }
 }
 
 #[cfg(test)]
@@ -1477,7 +1557,7 @@ mod tests {
         // Results are specific to the specific input files stored in the repo.
         assert_eq!(super::call_day_func( 1, false, true),           "24000");
         assert_eq!(super::call_day_func( 1, false, false),          "71934");
-        assert_eq!(super::call_day_func( 1,  true, true),          "211447");
+        assert_eq!(super::call_day_func( 1,  true, true),           "45000");
         assert_eq!(super::call_day_func( 1,  true, false),         "211447");
         assert_eq!(super::call_day_func( 2, false, false),          "13268");
         assert_eq!(super::call_day_func( 2,  true, false),          "15508");
@@ -1533,8 +1613,13 @@ mod tests {
         assert_eq!(super::call_day_func(18,  true, false),           "2428");
 
         assert_eq!(super::call_day_func(20, false,  true),              "3");
-        assert_eq!(super::call_day_func(20, false, false),           "3472");
+        assert_eq!(super::call_day_func(20, false, false),           "3473");
         assert_eq!(super::call_day_func(20,  true,  true),     "1623178306");
         assert_eq!(super::call_day_func(20,  true, false),  "7496649006261");
+
+        assert_eq!(super::call_day_func(21,  false,  true),            "152");
+        assert_eq!(super::call_day_func(21,  false, false), "81075092088442");
+        assert_eq!(super::call_day_func(21,  true,   true),            "301");
+        assert_eq!(super::call_day_func(21,  true,  false),  "3349136384441");
     }
 }
