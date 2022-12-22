@@ -1314,7 +1314,7 @@ fn day19(lines:Vec<String>, second_part:bool) -> u32  {
     }
 
     // Find the shortest time to make x geod robots, if time is < 24, then that's the best
-    fn find_max_geods(blueprints:&Vec<Vec<u32>>, active_robots:&Vec<u32>, resources:&Vec<u32>, time_left:u32) -> u32 {
+    fn find_max_geods(blueprints:&Vec<Vec<u32>>, active_robots:&Vec<u32>, dont_build:&Vec<bool>, resources:&Vec<u32>, time_left:u32) -> u32 {
    
         #[derive(PartialEq, Clone, Copy)]
         enum Robot { Ore = 0, Clay = 1, Obsidian = 2, Geode = 3}
@@ -1330,7 +1330,9 @@ fn day19(lines:Vec<String>, second_part:bool) -> u32  {
             let new_resources = std::iter::zip(active_robots, resources).map(|(a,b)| a+b).collect::<Vec<u32>>();
 
             // Start with max if no robots are built.
-            let mut max = find_max_geods(blueprints, &active_robots, &new_resources, time_left-1);
+            let build_options =  blueprints.iter().map(|b| can_build_robot(b, resources)).collect::<Vec<bool>>();
+        
+            let mut max = find_max_geods(blueprints, &active_robots, &build_options, &new_resources, time_left-1);
 
             // Get the maximum of each option that exists.
             // Assumes only 1 robot can be built per time step.
@@ -1338,7 +1340,7 @@ fn day19(lines:Vec<String>, second_part:bool) -> u32  {
                 if i < Robot::Geode as usize && 
                    blueprints.iter().fold(0, |m,b| std::cmp::max(m,b[i])) <= active_robots[i] {
                     // Don't build too many robots of the same type.
-                } else if can_build_robot(current_blueprint, resources) { 
+                } else if can_build_robot(current_blueprint, resources) && dont_build[i] == false { 
                     // Use up the resource to build the robot.
                     let mut new_robots = active_robots.clone();
                     new_robots[i] += 1;
@@ -1347,68 +1349,15 @@ fn day19(lines:Vec<String>, second_part:bool) -> u32  {
                     let mut reduced_resources = std::iter::zip(&new_resources, current_blueprint).map(|(a,b)| a-b).collect::<Vec<u32>>();
                     reduced_resources.push(new_resources[Robot::Geode as usize]); // Geod isn't in the blueprint, so carry over. 
 
-                    max = std::cmp::max(max, find_max_geods(blueprints, &new_robots, &reduced_resources, time_left-1));
+                    max = std::cmp::max(max, find_max_geods(blueprints, &new_robots, &vec![false;4], &reduced_resources, time_left-1));
                 }
             }
             max
         }
     }
 
-    fn shortest_path_to_regular_obsidian(blueprints:&Vec<Vec<u32>>, active_robots:&Vec<u32>, resources:&Vec<u32>, time_left:u32) -> bool {
-   
-        #[derive(PartialEq, Clone, Copy)]
-        enum Robot { Ore = 0, Clay = 1, Obsidian = 2, Geode = 3}
-
-        let mut active_match = (blueprints[Robot::Geode as usize][Robot::Ore as usize] == active_robots[Robot::Ore as usize]) &&
-                               (blueprints[Robot::Geode as usize][Robot::Obsidian as usize] == active_robots[Robot::Obsidian as usize]);
-
-        if active_match {
-            println!("Match");
-            return true;
-        }
-
-        // Can build the robot if the resources are at lest the requirement for the blueprint
-        let can_build_robot = |blueprint, resource| {std::iter::zip(blueprint, resource).fold(true, |s,(b,r)| s && r >= b)};
-
-        if 0 == time_left {
-            false
-        } else {
-            // Get the newly mined resources from previous robots.
-            let new_resources = std::iter::zip(active_robots, resources).map(|(a,b)| a+b).collect::<Vec<u32>>();
-
-            // Start with max if no robots are built.
-            active_match = shortest_path_to_regular_obsidian(blueprints, &active_robots, &new_resources, time_left-1);
-
-            if false == active_match {
-            // Get the maximum of each option that exists.
-            // Assumes only 1 robot can be built per time step.
-                for (i, current_blueprint) in blueprints.iter().enumerate().rev() {
-                    if i < Robot::Geode as usize && 
-                        (((i == Robot::Ore as usize && blueprints[Robot::Geode as usize][Robot::Ore as usize] == active_robots[i]) ||
-                         (i == Robot::Obsidian as usize && blueprints[Robot::Geode as usize][Robot::Obsidian as usize] == active_robots[i])) 
-                        || (blueprints.iter().fold(0, |m,b| std::cmp::max(m,b[i])) <= active_robots[i])) {
-                            // Don't build too many robots of the same type.
-                        } else if can_build_robot(current_blueprint, resources) { 
-                            // Use up the resource to build the robot.
-                            let mut new_robots = active_robots.clone();
-                            new_robots[i] += 1;
-
-                            // Reduce the 'new' resources
-                            let mut reduced_resources = std::iter::zip(&new_resources, current_blueprint).map(|(a,b)| a-b).collect::<Vec<u32>>();
-                            reduced_resources.push(new_resources[Robot::Geode as usize]); // Geod isn't in the blueprint, so carry over. 
-
-                            active_match |= shortest_path_to_regular_obsidian(blueprints, &new_robots, &reduced_resources, time_left-1);
-                            if active_match {
-                                break;
-                            }
-                        }
-                        }
-                }
-            active_match
-        }
-    }
-
     let mut quality = 0;
+    let mut result = 1;
     for (index, blueprints) in all_blueprints.iter().enumerate() {
         // Options:  
         //   Do Nothing
@@ -1421,24 +1370,18 @@ fn day19(lines:Vec<String>, second_part:bool) -> u32  {
         let robots    = vec![1, 0, 0, 0]; // Always start with 1 ore robot.
         let resources = vec![0, 0, 0, 0];
         if !second_part {
-            let geodes = find_max_geods(&blueprints, &robots, &resources, 24);
+            let geodes = find_max_geods(&blueprints, &robots, &vec![false;4], &resources, 24);
             println!("{}", geodes);
             quality += geodes * (index as u32 + 1);
         } else {
-            for i in 0..40 {
-                let found = shortest_path_to_regular_obsidian(blueprints, &robots, &resources, i);
-                if found {
-                    println!("found: {}", i);
-                    break;
-                }
-                else {
-                    println!("not found: {}", i);
-                }
+            if index <= 2 {
+                let geodes = find_max_geods(&blueprints, &robots, &vec![false;4], &resources, 32);
+                result *= geodes;
             }
         }
     }
 
-    quality
+    if !second_part { quality } else { result }
 }
 
 fn day20(lines:Vec<String>, second_part:bool) -> i64  {
