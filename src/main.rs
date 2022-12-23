@@ -1499,6 +1499,7 @@ fn day21(lines:Vec<String>, second_part:bool) -> i64  {
 }
 
 fn day22(lines:Vec<String>, second_part:bool, sample:bool) -> i32  {
+    // Split part A and B, as the method used for A was too different for B.
     if !second_part {
         day22_parta(lines, second_part, sample)
     } else {
@@ -1507,47 +1508,21 @@ fn day22(lines:Vec<String>, second_part:bool, sample:bool) -> i32  {
 }
 fn day22_parta(lines:Vec<String>, second_part:bool, sample:bool) -> i32  {
 
-    // Need to map faces, to perform appropriate rotation and teleportation.
-    //
-    //         1111
-    //         1111
-    //         1111
-    //         1111
-    // 222233334444
-    // 222233334444
-    // 222233334444
-    // 222233334444
-    //         55556666
-    //         55556666
-    //         55556666
-    //         55556666
-    //
-    //
-    //   12
-    //   3
-    //  45
-    //  6 
-    
-    fn next_step(position:&(i32, i32), heading:&usize, width:i32, is_3d:bool, sample:bool ) -> ((i32, i32),usize) {
-        if !is_3d {
-            let offsets_vec = vec![(1,0), ( 0, 1), (-1,0), ( 0,-1)];
-            let offset = offsets_vec[heading%offsets_vec.len()];
+    fn next_step(position:&(i32, i32), heading:&usize, width:i32, sample:bool ) -> ((i32, i32),usize) {
+        let offsets_vec = vec![(1,0), ( 0, 1), (-1,0), ( 0,-1)];
+        let offset = offsets_vec[heading%offsets_vec.len()];
 
-            if sample {
-                ((((width*4) + ((position.0 + offset.0) % (width*4))) % (width*4),  
-                  ((width*3) + ((position.1 + offset.1) % (width*3))) % (width*3)),*heading)
-            } else {
-                ((((width*3) + ((position.0 + offset.0) % (width*3))) % (width*3),  
-                  ((width*4) + ((position.1 + offset.1) % (width*4))) % (width*4)),*heading)
-            }
+        if sample {
+            ((((width*4) + ((position.0 + offset.0) % (width*4))) % (width*4),  
+              ((width*3) + ((position.1 + offset.1) % (width*3))) % (width*3)),*heading)
         } else {
-            ((0,0),0)
+            ((((width*3) + ((position.0 + offset.0) % (width*3))) % (width*3),  
+              ((width*4) + ((position.1 + offset.1) % (width*4))) % (width*4)),*heading)
         }
     }
 
     #[derive(PartialEq, Clone, Copy)]
     enum Map { Void = 0, Empty = 1, Wall = 2}
-    enum Direction { Left = 0, Right}
 
     let mut cube_width:i32 = if sample {4} else {50};
     let mut rows = Vec::new();
@@ -1581,10 +1556,10 @@ fn day22_parta(lines:Vec<String>, second_part:bool, sample:bool) -> i32  {
         }
 
         for _ in 0..distance.iter().collect::<String>().parse::<i32>().unwrap() {
-            let (mut next_position,mut heading) = next_step(&position, &heading, cube_width, false, sample);
+            let (mut next_position,mut heading) = next_step(&position, &heading, cube_width, sample);
             while rows[next_position.1 as usize][next_position.0 as usize] == Map::Void {
                 // Find the first 'non empty' position
-                (next_position,heading) = next_step(&next_position, &heading, cube_width, false, sample);
+                (next_position,heading) = next_step(&next_position, &heading, cube_width, sample);
             }
 
             match rows[next_position.1 as usize][next_position.0 as usize] {
@@ -1618,19 +1593,23 @@ fn day22_partb(lines:Vec<String>, second_part:bool, sample:bool) -> i32  {
 
     let mut rows = Vec::new();
     let mut iter = lines.into_iter();
+    let mut points = 0;
     while let Some(line) = iter.next() {
         if line == "" {break;}
-        rows.push(line.chars().into_iter().map(|c| match c {' ' => {Map::Void}, 
-                                        '.' => {Map::Empty},
-                                        '#' => {Map::Wall},
+        rows.push(line.chars().into_iter().map(|c| { match c {' ' => {Map::Void}, 
+                                        '.' => {points +=1; Map::Empty},
+                                        '#' => {points +=1; Map::Wall},
                                         _ => {panic!("Invalid input {}",c)},
-                                       }).collect::<Vec<Map>>());
+                                       }}).collect::<Vec<Map>>());
     }
 
+    // Calculate the cube width from the input.
+    let cube_width = ((points/6) as f32).sqrt() as i32;
+
     // Get the initial position in the flat image.
-    let mut grid_position = (rows[0].iter().position(|c| *c == Map::Empty).unwrap() as i32,0);
-    let mut panel_pos = (0,0);
-    let mut grid_dir = (1,0);
+    let grid_position = (rows[0].iter().position(|c| *c == Map::Empty).unwrap() as i32,0);
+    let panel_pos = (0,0);
+    let grid_dir = (1,0);
 
     // Set the initial position in 3d.
     let mut normal            = (0,0,-1);
@@ -1668,9 +1647,12 @@ fn day22_partb(lines:Vec<String>, second_part:bool, sample:bool) -> i32  {
         (-point.0, -point.1, -point.2)
     }
     
-    let mut grid_position = (rows[0].iter().position(|c| *c == Map::Empty).unwrap() as i32,0);
+    let grid_position = (rows[0].iter().position(|c| *c == Map::Empty).unwrap() as i32,0);
 
-    fn build_cube(real_cube: &mut HashMap::<((i32,i32,i32),(i32,i32,i32)),Map>, 
+    // Create the cube in 3d.  Maintain direction for both the current 3d point and the 2d input
+    // location.  Insert each input character into a map with the key being 'point + normal', also
+    // store the 2d grid (as it's needed at the end to calculate the result values).
+    fn build_cube(real_cube: &mut HashMap::<((i32,i32,i32),(i32,i32,i32)),(Map,(i32,i32))>, 
                   grid:&Vec<Vec<Map>>, grid_pos:(i32,i32), panel_pos:(i32,i32), current_grid_dir:(i32,i32), 
                   position:(i32,i32,i32), normal:(i32,i32,i32), current_direction:(i32,i32,i32), width:i32) {
         if let Some(value) = real_cube.get(&(normal,position)) {
@@ -1681,7 +1663,7 @@ fn day22_partb(lines:Vec<String>, second_part:bool, sample:bool) -> i32  {
                 if grid[grid_pos.1 as usize][grid_pos.0 as usize] == Map::Void {
                     panic!("Grid location invalid.");
                 }
-                real_cube.insert((normal,position),grid[grid_pos.1 as usize][grid_pos.0 as usize]);
+                real_cube.insert((normal,position),(grid[grid_pos.1 as usize][grid_pos.0 as usize],(grid_pos.0,grid_pos.1)));
                 let mut new_grid_dir = current_grid_dir;
                 let mut new_direction = current_direction;
                 for i in 0..4 {
@@ -1712,41 +1694,137 @@ fn day22_partb(lines:Vec<String>, second_part:bool, sample:bool) -> i32  {
         }
     }
 
-    let mut cube_width:i32 = if sample {4} else {50};
     build_cube(&mut real_cube, &rows, grid_position, panel_pos, grid_dir, position, normal, current_direction, cube_width);
-
-    println!("{}", real_cube.len());
-
 
     // Movement
     let movements = iter.next().unwrap();
 
     // Get the initial position.
-    let mut position = (rows[0].iter().position(|c| *c == Map::Empty).unwrap() as i32,0);
+    let grid_position = (rows[0].iter().position(|c| *c == Map::Empty).unwrap() as i32,0);
 
+    let mut output = vec![vec![0;(cube_width*4) as usize];(cube_width*4) as usize];
+    position          = (0,0,0);
+    let mut previous_grid     = grid_position;
+
+    // Answer was too high (36541).
     let mut movements_iter = movements.chars().peekable();
     while !movements_iter.peek().is_none() {
-        let mut distance = Vec::<char>::new();
+        let mut distance      = Vec::<char>::new();
+
         while let Some(digit) = movements_iter.next_if(|c| c.is_digit(10))
         {
             distance.push(digit);
         }
 
         for _ in 0..distance.iter().collect::<String>().parse::<i32>().unwrap() {
+            let mut new_position        = position;
+            let mut new_normal          = normal;
+            let mut new_direction = current_direction;
+
+            if let Some((value,grid_pos)) = real_cube.get(&(normal,position)) { // debug
+                if (grid_pos.0 != previous_grid.0) || (grid_pos.1 != previous_grid.1) {
+                    println!("previous_grid, grid_pos = {} {} -> {} {})", previous_grid.0, previous_grid.1, grid_pos.0, grid_pos.1);  // debug
+                    previous_grid = *grid_pos;
+                }
+                output[grid_pos.1 as usize][grid_pos.0 as usize] = 1;  // debug
+            } // debug
+
+            new_position = apply_offset(position, new_direction);
+
+            // Check if we need to move to a new surface.
+            if new_position.0 < 0 || new_position.1 < 0 || new_position.2 < 0 || 
+               new_position.0 >= cube_width || new_position.1 >= cube_width || new_position.2 >= cube_width {
+                new_normal = current_direction;
+                new_direction = negate_vector(normal);
+                new_position = position; // reset the position.
+            }
+
+            if let Some((value,grid_pos)) = real_cube.get(&(new_normal,new_position)) {
+                if *value != Map::Wall {
+                    current_direction = new_direction;
+                    normal = new_normal;
+                    position = new_position;
+                }
+            } else {
+                panic!("Can't find location on cube, this shouldn't be possible. {} {} {}", new_position.0, new_position.1, new_position.2);
+            }
 
         }
 
         match movements_iter.next() {
-            Some('R') => {/* rotate right */}, // Get 'next' to turn right.
-            Some('L') => {/* rotate left */}, // turn left = 3 rights).
+            Some('R') => {for _ in 0..3{current_direction = rotate_anti_clock(current_direction, normal);}}, // turn right = 3 lefts.
+            Some('L') => {current_direction = rotate_anti_clock(current_direction, normal);}, // turn left.
             None => {()} 
             _ => {panic!("Unexpected movement");} 
         }
     }
-    
 
+    // Get the heading
+    // Not keeping track of the 2d heading, so move in 3d.  
+    // If forward falls of panel, then go in reverse.
+    let mut heading_value = 0;
+    if let Some((value,grid_pos)) = real_cube.get(&(normal,position)) {
+        let mut grid_direction = (0,0);
+        if let Some((value,next_grid_pos)) = real_cube.get(&(normal,apply_offset(position, current_direction))) {
+            grid_direction.0 = next_grid_pos.0 - grid_pos.0;
+            grid_direction.1 = next_grid_pos.1 - grid_pos.1;
+        } else if let Some((value,next_grid_pos)) = real_cube.get(&(normal,apply_offset(position, negate_vector(current_direction)))) {
+            grid_direction.0 = grid_pos.0 - next_grid_pos.0;
+            grid_direction.1 = grid_pos.1 - next_grid_pos.1;
+        }
+        // The 'heading' value is right = 0, down = 1, left = 2, up = 3.
+        for (i,v) in [(1,0),(0,1),(-1,0),(0,-1)].iter().enumerate() {
+            if *v == grid_direction {
+                heading_value = i as i32;
+            }
+        }
 
-    0
+    }
+
+    /* Debug output:
+    let mut printed = false;
+    for row in output {
+        printed  = false;
+        for c in row {
+            match c {1 => {print!("*");},
+                _ => {print!(" ");}
+            }
+            printed  = true;
+        }
+        if printed { println!(""); }
+    }
+
+    // Draw map.
+    let mut map_output = vec![vec![Map::Void;(cube_width*4) as usize];(cube_width*4) as usize];
+    for (_key, (value,grid_pos)) in real_cube.iter() {
+        map_output[grid_pos.1 as usize][grid_pos.0 as usize] = *value;
+    }
+
+    for row in map_output {
+        printed  = false;
+        for c in row {
+            match c {Map::Void => {print!(" ");},
+                     Map::Empty => {print!(".");printed  = true},
+                     Map::Wall => {print!("#");printed  = true},
+                _ => {print!(" ");}
+            }
+            ;
+        }
+        if printed { println!(""); }
+    }
+
+    if let Some((value,grid_pos)) = real_cube.get(&(normal,position)) {
+        println!("Final grid = {} {}", grid_pos.0, grid_pos.1); 
+    }
+    println!("Final position = {} {} {}", position.0, position.1, position.2); 
+    println!("Final direction = {} {} {}", current_direction.0, current_direction.1, current_direction.2); 
+*/ 
+
+    if let Some((value,grid_pos)) = real_cube.get(&(normal,position)) {
+        (1000 * (grid_pos.1+1)) + (4 * (grid_pos.0+1)) + heading_value
+    } else {
+        0
+    }
 }
 
 #[cfg(test)]
@@ -1779,6 +1857,7 @@ mod tests {
         expected.insert(19,[   "33",           "1834",          "3472",           "2240"]);
         expected.insert(20,[    "3",           "3473",    "1623178306",  "7496649006261"]);
         expected.insert(21,[  "152", "81075092088442",           "301",  "3349136384441"]);
+        expected.insert(22,[ "6032",          "31568",          "5031",          "36540"]);
 
         for (day, expect) in expected {
             for (i, test_mode) in test_order.iter().enumerate() {
