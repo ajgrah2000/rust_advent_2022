@@ -59,6 +59,7 @@ fn call_day_func (day_number:u8, second_part:bool, sample:bool) -> String {
            20 => {format!("{}", day20(lines, second_part))},
            21 => {format!("{}", day21(lines, second_part))},
            22 => {format!("{}", day22(lines, second_part, sample))},
+           23 => {format!("{}", day23(lines, second_part))},
             _ => {format!("Unsupported day {}", day_number)}
     }
 }
@@ -1524,21 +1525,28 @@ fn day22_parta(lines:Vec<String>, second_part:bool, sample:bool) -> i32  {
     #[derive(PartialEq, Clone, Copy)]
     enum Map { Void = 0, Empty = 1, Wall = 2}
 
-    let mut cube_width:i32 = if sample {4} else {50};
     let mut rows = Vec::new();
     let mut iter = lines.into_iter();
+    let mut points = 0;
     while let Some(line) = iter.next() {
         if line == "" {break;}
         let mut new_row = line.chars()
                       .into_iter()
                       .map(|c| match c {' ' => {Map::Void}, 
-                                        '.' => {Map::Empty},
-                                        '#' => {Map::Wall},
+                                        '.' => {points+=1; Map::Empty},
+                                        '#' => {points+=1; Map::Wall},
                                         _ => {panic!("Invalid input {}",c)},
                                        })
                       .collect::<Vec<Map>>();
-        new_row.resize(4*cube_width as usize,  Map::Void);
         rows.push(new_row);
+    }
+
+    // Calculate the cube width from the input.
+    let cube_width = ((points/6) as f32).sqrt() as i32;
+
+    rows.resize(4*cube_width as usize,  vec![Map::Void;cube_width as usize]);
+    for row in &mut rows {
+        row.resize(4*cube_width as usize,  Map::Void);
     }
 
     let movements = iter.next().unwrap();
@@ -1702,7 +1710,6 @@ fn day22_partb(lines:Vec<String>, second_part:bool, sample:bool) -> i32  {
     // Get the initial position.
     let grid_position = (rows[0].iter().position(|c| *c == Map::Empty).unwrap() as i32,0);
 
-    let mut output = vec![vec![0;(cube_width*4) as usize];(cube_width*4) as usize];
     position          = (0,0,0);
     let mut previous_grid     = grid_position;
 
@@ -1720,14 +1727,6 @@ fn day22_partb(lines:Vec<String>, second_part:bool, sample:bool) -> i32  {
             let mut new_position        = position;
             let mut new_normal          = normal;
             let mut new_direction = current_direction;
-
-            if let Some((value,grid_pos)) = real_cube.get(&(normal,position)) { // debug
-                if (grid_pos.0 != previous_grid.0) || (grid_pos.1 != previous_grid.1) {
-                    println!("previous_grid, grid_pos = {} {} -> {} {})", previous_grid.0, previous_grid.1, grid_pos.0, grid_pos.1);  // debug
-                    previous_grid = *grid_pos;
-                }
-                output[grid_pos.1 as usize][grid_pos.0 as usize] = 1;  // debug
-            } // debug
 
             new_position = apply_offset(position, new_direction);
 
@@ -1781,51 +1780,154 @@ fn day22_partb(lines:Vec<String>, second_part:bool, sample:bool) -> i32  {
 
     }
 
-    /* Debug output:
-    let mut printed = false;
-    for row in output {
-        printed  = false;
-        for c in row {
-            match c {1 => {print!("*");},
-                _ => {print!(" ");}
-            }
-            printed  = true;
-        }
-        if printed { println!(""); }
-    }
-
-    // Draw map.
-    let mut map_output = vec![vec![Map::Void;(cube_width*4) as usize];(cube_width*4) as usize];
-    for (_key, (value,grid_pos)) in real_cube.iter() {
-        map_output[grid_pos.1 as usize][grid_pos.0 as usize] = *value;
-    }
-
-    for row in map_output {
-        printed  = false;
-        for c in row {
-            match c {Map::Void => {print!(" ");},
-                     Map::Empty => {print!(".");printed  = true},
-                     Map::Wall => {print!("#");printed  = true},
-                _ => {print!(" ");}
-            }
-            ;
-        }
-        if printed { println!(""); }
-    }
-
-    if let Some((value,grid_pos)) = real_cube.get(&(normal,position)) {
-        println!("Final grid = {} {}", grid_pos.0, grid_pos.1); 
-    }
-    println!("Final position = {} {} {}", position.0, position.1, position.2); 
-    println!("Final direction = {} {} {}", current_direction.0, current_direction.1, current_direction.2); 
-*/ 
-
     if let Some((value,grid_pos)) = real_cube.get(&(normal,position)) {
         (1000 * (grid_pos.1+1)) + (4 * (grid_pos.0+1)) + heading_value
     } else {
         0
     }
 }
+
+fn day23(lines:Vec<String>, second_part:bool) -> i32  {
+
+    let mut elves:Vec<(i32, i32)> = Vec::new();
+    for (y, line) in lines.iter().enumerate() {
+        for (x, location) in line.chars().into_iter().enumerate() {
+            if location == '#' {
+                elves.push((x as i32,y as i32));
+            }
+        }
+    }
+
+    let move_directions = vec![(0,-1), (0,1),(-1,0),(1,0)];
+    let mut move_direction_iter = move_directions.iter().cycle();
+
+
+    let max_rounds = if !second_part {10} else {10000};
+    let mut final_round = 0;
+
+    for round in 0..max_rounds {
+
+//        print_points(&elves);
+
+        let mut proposed_locations:HashMap::<(i32,i32),u32> = HashMap::new();
+
+        fn apply_offset(point:(i32,i32), offset:(i32,i32)) -> (i32,i32) {
+            ((point.0 + offset.0), (point.1 + offset.1))
+        };
+
+        let mut proposed_new_elves:Vec<(i32, i32)> = Vec::new();
+
+        // Look for a spot.
+        for (pos, elf) in elves.iter().by_ref().enumerate() {
+            let mut elf_move_direction = move_direction_iter.clone(); 
+
+            proposed_new_elves.insert(pos, *elf);
+
+            let mut no_other_elves = true;
+            for i in -1..=1 {
+                for j in -1..=1 {
+                    if j != 0 || i != 0 {
+                        no_other_elves &= !elves.contains(&apply_offset(*elf,(i, j)));
+                    }
+                }
+            }
+
+            if !no_other_elves {
+                for i in 0..move_directions.len() {
+                    let look_dir = elf_move_direction.next().unwrap();
+                    let mut other_elves = false;
+                    for j in -1..=1 {
+                        if look_dir.0 == 0 {
+                            other_elves |= elves.contains(&apply_offset(*elf,(j, look_dir.1)));
+                        } else {
+                            other_elves |= elves.contains(&apply_offset(*elf,(look_dir.0, j)));
+                        }
+                    }
+
+                    if !other_elves {
+                        let new_position = apply_offset(*elf, *look_dir);
+                        proposed_new_elves.insert(pos, new_position);
+                        if let Some(value) = proposed_locations.get(&new_position)
+                        {
+                            proposed_locations.insert(new_position, value + 1);
+                        } else {
+                            proposed_locations.insert(new_position, 1);
+                        }
+                        break;
+                    }
+                }
+            }
+        }
+
+
+        let mut new_elves:Vec<(i32, i32)> = Vec::new();
+        // Move if there was only one elf going there (you).
+        for (elf, new_position) in std::iter::zip(&elves, proposed_new_elves) {
+            if let Some(value) = proposed_locations.get(&new_position)
+            {
+                if *value == 1 {
+                    new_elves.push(new_position);
+                } else {
+                    new_elves.push(*elf);
+                }
+            } else {
+                // Elf didn't move.
+                new_elves.push(*elf);
+            }
+        }
+
+        elves = new_elves;
+
+        let next_dir = move_direction_iter.next().unwrap(); 
+        if 0 == proposed_locations.len() {
+            final_round = round + 1 as i32;
+            break;
+        }
+    }
+
+    let mut min_x = elves[0].0;
+    let mut max_x = elves[0].0;
+    let mut min_y = elves[0].1;
+    let mut max_y = elves[0].1;
+    min_x = elves.iter().fold(min_x, |s, p| std::cmp::min(s, p.0));
+    max_x = elves.iter().fold(max_x, |s, p| std::cmp::max(s, p.0));
+    max_y = elves.iter().fold(max_y, |s, p| std::cmp::max(s, p.1));
+    min_y = elves.iter().fold(min_y, |s, p| std::cmp::min(s, p.1));
+
+    if !second_part {
+        ((1+max_x) - min_x) * ((1+max_y) - min_y) - elves.len() as i32
+    } else {
+        final_round
+    }
+}
+
+fn print_points(points:&Vec<(i32,i32)>) {
+    let mut min_x = points[0].0;
+    let mut max_x = points[0].0;
+    let mut min_y = points[0].1;
+    let mut max_y = points[0].1;
+    min_x = points.iter().fold(min_x, |s, p| std::cmp::min(s, p.0));
+    max_x = points.iter().fold(max_x, |s, p| std::cmp::max(s, p.0));
+    max_y = points.iter().fold(max_y, |s, p| std::cmp::max(s, p.1));
+    min_y = points.iter().fold(min_y, |s, p| std::cmp::min(s, p.1));
+
+    let mut output = vec![vec![0;(max_x - min_x + 1) as usize];(max_y - min_y + 1) as usize];
+    for point in points {
+        output[(point.1 - min_y) as usize][(point.0 - min_x) as usize] = 1;
+    }
+    println!("Offset, min (x,y) = {} {}", min_x, min_y);
+    for row in output {
+        for c in row {
+            if 0 == c { print!(".");
+            } else {
+                print!("#")
+            }
+        }
+        println!("")
+    }
+}
+    
+
 
 #[cfg(test)]
 mod tests {
@@ -1858,6 +1960,7 @@ mod tests {
         expected.insert(20,[    "3",           "3473",    "1623178306",  "7496649006261"]);
         expected.insert(21,[  "152", "81075092088442",           "301",  "3349136384441"]);
         expected.insert(22,[ "6032",          "31568",          "5031",          "36540"]);
+        expected.insert(23,[  "110",           "3862",            "20",            "913"]);
 
         for (day, expect) in expected {
             for (i, test_mode) in test_order.iter().enumerate() {
