@@ -58,6 +58,7 @@ fn call_day_func (day_number:u8, second_part:bool, sample:bool) -> String {
            19 => {format!("{}", day19(lines, second_part))},
            20 => {format!("{}", day20(lines, second_part))},
            21 => {format!("{}", day21(lines, second_part))},
+           22 => {format!("{}", day22(lines, second_part, sample))},
             _ => {format!("Unsupported day {}", day_number)}
     }
 }
@@ -1497,6 +1498,257 @@ fn day21(lines:Vec<String>, second_part:bool) -> i64  {
     }
 }
 
+fn day22(lines:Vec<String>, second_part:bool, sample:bool) -> i32  {
+    if !second_part {
+        day22_parta(lines, second_part, sample)
+    } else {
+        day22_partb(lines, second_part, sample)
+    }
+}
+fn day22_parta(lines:Vec<String>, second_part:bool, sample:bool) -> i32  {
+
+    // Need to map faces, to perform appropriate rotation and teleportation.
+    //
+    //         1111
+    //         1111
+    //         1111
+    //         1111
+    // 222233334444
+    // 222233334444
+    // 222233334444
+    // 222233334444
+    //         55556666
+    //         55556666
+    //         55556666
+    //         55556666
+    //
+    //
+    //   12
+    //   3
+    //  45
+    //  6 
+    
+    fn next_step(position:&(i32, i32), heading:&usize, width:i32, is_3d:bool, sample:bool ) -> ((i32, i32),usize) {
+        if !is_3d {
+            let offsets_vec = vec![(1,0), ( 0, 1), (-1,0), ( 0,-1)];
+            let offset = offsets_vec[heading%offsets_vec.len()];
+
+            if sample {
+                ((((width*4) + ((position.0 + offset.0) % (width*4))) % (width*4),  
+                  ((width*3) + ((position.1 + offset.1) % (width*3))) % (width*3)),*heading)
+            } else {
+                ((((width*3) + ((position.0 + offset.0) % (width*3))) % (width*3),  
+                  ((width*4) + ((position.1 + offset.1) % (width*4))) % (width*4)),*heading)
+            }
+        } else {
+            ((0,0),0)
+        }
+    }
+
+    #[derive(PartialEq, Clone, Copy)]
+    enum Map { Void = 0, Empty = 1, Wall = 2}
+    enum Direction { Left = 0, Right}
+
+    let mut cube_width:i32 = if sample {4} else {50};
+    let mut rows = Vec::new();
+    let mut iter = lines.into_iter();
+    while let Some(line) = iter.next() {
+        if line == "" {break;}
+        let mut new_row = line.chars()
+                      .into_iter()
+                      .map(|c| match c {' ' => {Map::Void}, 
+                                        '.' => {Map::Empty},
+                                        '#' => {Map::Wall},
+                                        _ => {panic!("Invalid input {}",c)},
+                                       })
+                      .collect::<Vec<Map>>();
+        new_row.resize(4*cube_width as usize,  Map::Void);
+        rows.push(new_row);
+    }
+
+    let movements = iter.next().unwrap();
+
+    // Get the initial position.
+    let mut position = (rows[0].iter().position(|c| *c == Map::Empty).unwrap() as i32,0);
+    let mut heading = 0;
+
+    let mut movements_iter = movements.chars().peekable();
+    while !movements_iter.peek().is_none() {
+        let mut distance = Vec::<char>::new();
+        while let Some(digit) = movements_iter.next_if(|c| c.is_digit(10))
+        {
+            distance.push(digit);
+        }
+
+        for _ in 0..distance.iter().collect::<String>().parse::<i32>().unwrap() {
+            let (mut next_position,mut heading) = next_step(&position, &heading, cube_width, false, sample);
+            while rows[next_position.1 as usize][next_position.0 as usize] == Map::Void {
+                // Find the first 'non empty' position
+                (next_position,heading) = next_step(&next_position, &heading, cube_width, false, sample);
+            }
+
+            match rows[next_position.1 as usize][next_position.0 as usize] {
+                Map::Void => {panic!("Void shouldn't be possible here.");},
+                Map::Empty => {position = next_position;},
+                Map::Wall => {()},
+            }
+        }
+
+        match movements_iter.next() {
+            Some('R') => {heading = (heading + 1) % 4;}, // Get 'next' to turn right.
+            Some('L') => {heading = (heading + 3) % 4;}, // turn left (3 rights).
+            None => {()} 
+            _ => {panic!("Unexpected movement");} 
+        }
+    }
+    
+    let result = 1000 * (position.1+1) + 4 * (position.0+1) + heading as i32;
+
+    result
+}
+
+fn day22_partb(lines:Vec<String>, second_part:bool, sample:bool) -> i32  {
+
+    // Flood fill
+    // If leaving a 'panel', update 'dir' and 'normal'
+    // Store each pixel in 3d with normal (normal, (x,y,z)) (there will be duplicates on edges).
+    
+    #[derive(PartialEq, Clone, Copy)]
+    enum Map { Void = 0, Empty = 1, Wall = 2}
+
+    let mut rows = Vec::new();
+    let mut iter = lines.into_iter();
+    while let Some(line) = iter.next() {
+        if line == "" {break;}
+        rows.push(line.chars().into_iter().map(|c| match c {' ' => {Map::Void}, 
+                                        '.' => {Map::Empty},
+                                        '#' => {Map::Wall},
+                                        _ => {panic!("Invalid input {}",c)},
+                                       }).collect::<Vec<Map>>());
+    }
+
+    // Get the initial position in the flat image.
+    let mut grid_position = (rows[0].iter().position(|c| *c == Map::Empty).unwrap() as i32,0);
+    let mut panel_pos = (0,0);
+    let mut grid_dir = (1,0);
+
+    // Set the initial position in 3d.
+    let mut normal            = (0,0,-1);
+    let mut position          = (0,0,0);
+    let mut current_direction = (1,0,0);
+
+    // Hash: (normal), (position) = (Map, (x,y))
+    let mut real_cube = HashMap::new();
+    // Cross product.
+    // |  i  j  k |
+    // | di dj dk |
+    // | ni nj nk |
+    fn rotate_anti_clock(dir:(i32,i32,i32), norm:(i32,i32,i32)) -> (i32,i32,i32) {
+        ((dir.2 * norm.1) - (dir.1 * norm.2), 
+         (dir.0 * norm.2) - (dir.2 * norm.0), 
+         (dir.1 * norm.0) - (dir.0 * norm.1))
+    };
+
+    // |  i  j  k |
+    // | di dj  0 |
+    // |  0  0 -1 |
+    fn rotate_grid_anti_clock(dir:(i32,i32)) -> (i32,i32) {
+        (dir.1, -dir.0)
+    };
+
+    fn apply_grid_offset(point:(i32,i32), offset:(i32,i32)) -> (i32,i32) {
+        ((point.0 + offset.0), (point.1 + offset.1))
+    };
+
+    fn apply_offset(point:(i32,i32,i32), offset:(i32,i32,i32)) -> (i32,i32,i32) {
+        ((point.0 + offset.0), (point.1 + offset.1), (point.2 + offset.2))
+    };
+
+    fn negate_vector(point:(i32,i32,i32)) -> (i32,i32,i32) {
+        (-point.0, -point.1, -point.2)
+    }
+    
+    let mut grid_position = (rows[0].iter().position(|c| *c == Map::Empty).unwrap() as i32,0);
+
+    fn build_cube(real_cube: &mut HashMap::<((i32,i32,i32),(i32,i32,i32)),Map>, 
+                  grid:&Vec<Vec<Map>>, grid_pos:(i32,i32), panel_pos:(i32,i32), current_grid_dir:(i32,i32), 
+                  position:(i32,i32,i32), normal:(i32,i32,i32), current_direction:(i32,i32,i32), width:i32) {
+        if let Some(value) = real_cube.get(&(normal,position)) {
+            // Found
+        } else {
+            if panel_pos.0 >= 0 && panel_pos.1 >= 0 && panel_pos.1 < width as i32 && panel_pos.0 < width as i32 
+            {
+                if grid[grid_pos.1 as usize][grid_pos.0 as usize] == Map::Void {
+                    panic!("Grid location invalid.");
+                }
+                real_cube.insert((normal,position),grid[grid_pos.1 as usize][grid_pos.0 as usize]);
+                let mut new_grid_dir = current_grid_dir;
+                let mut new_direction = current_direction;
+                for i in 0..4 {
+                    // Check each direction.
+                    let new_position = apply_offset(position, new_direction);
+                    let new_grid_pos = apply_grid_offset(grid_pos, new_grid_dir);
+                    let new_panel_pos = apply_grid_offset(panel_pos, new_grid_dir);
+
+                    build_cube(real_cube, grid, new_grid_pos, new_panel_pos, new_grid_dir, 
+                               new_position, normal, new_direction, width);
+                    new_grid_dir = rotate_grid_anti_clock(new_grid_dir);
+                    new_direction = rotate_anti_clock(new_direction, normal);
+                }
+            } else {
+                if grid_pos.0 >= 0 && grid_pos.1 >= 0 && 
+                    grid_pos.1 < grid.len() as i32 && grid_pos.0 < grid[grid_pos.1 as usize].len() as i32 &&
+                    grid[grid_pos.1 as usize][grid_pos.0 as usize] != Map::Void {
+                        // Only continue if the edge of the grid hasn't been reached.
+                        let new_position = apply_offset(position, negate_vector(current_direction)); // Need to step back 1 in 3d
+                        let new_normal = current_direction;
+                        let new_direction = (-normal.0, -normal.1, -normal.2);
+                        let new_panel_pos = ((width + grid_pos.0 % width) % width,
+                        (width + grid_pos.1 % width) % width);
+                        // Switch sides and keep building.
+                        build_cube(real_cube, grid, grid_pos, new_panel_pos, current_grid_dir, new_position, new_normal, new_direction, width);
+                    }
+            }
+        }
+    }
+
+    let mut cube_width:i32 = if sample {4} else {50};
+    build_cube(&mut real_cube, &rows, grid_position, panel_pos, grid_dir, position, normal, current_direction, cube_width);
+
+    println!("{}", real_cube.len());
+
+
+    // Movement
+    let movements = iter.next().unwrap();
+
+    // Get the initial position.
+    let mut position = (rows[0].iter().position(|c| *c == Map::Empty).unwrap() as i32,0);
+
+    let mut movements_iter = movements.chars().peekable();
+    while !movements_iter.peek().is_none() {
+        let mut distance = Vec::<char>::new();
+        while let Some(digit) = movements_iter.next_if(|c| c.is_digit(10))
+        {
+            distance.push(digit);
+        }
+
+        for _ in 0..distance.iter().collect::<String>().parse::<i32>().unwrap() {
+
+        }
+
+        match movements_iter.next() {
+            Some('R') => {/* rotate right */}, // Get 'next' to turn right.
+            Some('L') => {/* rotate left */}, // turn left = 3 rights).
+            None => {()} 
+            _ => {panic!("Unexpected movement");} 
+        }
+    }
+    
+
+
+    0
+}
+
 #[cfg(test)]
 mod tests {
     #[test]
@@ -1533,6 +1785,9 @@ mod tests {
                 assert_eq!(super::call_day_func(day, test_mode.0, test_mode.1),  expect[i]);
             }
         }
+
+        assert_eq!(super::call_day_func(22, false,  true),          "6032");
+        assert_eq!(super::call_day_func(22, false, false),         "31568");
 
         assert_eq!(super::call_day_func(10, false,  true),          "13140");
         assert_eq!(super::call_day_func(10, false, false),          "11960");
