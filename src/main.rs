@@ -60,6 +60,7 @@ fn call_day_func (day_number:u8, second_part:bool, sample:bool) -> String {
            21 => {format!("{}", day21(lines, second_part))},
            22 => {format!("{}", day22(lines, second_part, sample))},
            23 => {format!("{}", day23(lines, second_part))},
+           24 => {format!("{}", day24(lines, second_part))},
             _ => {format!("Unsupported day {}", day_number)}
     }
 }
@@ -1805,9 +1806,9 @@ fn day23(lines:Vec<String>, second_part:bool) -> i32  {
     let max_rounds = if !second_part {10} else {10000};
     let mut final_round = 0;
 
-    for round in 0..max_rounds {
+    print_points(&elves);
 
-//        print_points(&elves);
+    for round in 0..max_rounds {
 
         let mut proposed_locations:HashMap::<(i32,i32),u32> = HashMap::new();
 
@@ -1883,6 +1884,8 @@ fn day23(lines:Vec<String>, second_part:bool) -> i32  {
             final_round = round + 1 as i32;
             break;
         }
+
+        print_points(&elves);
     }
 
     let mut min_x = elves[0].0;
@@ -1899,6 +1902,206 @@ fn day23(lines:Vec<String>, second_part:bool) -> i32  {
     } else {
         final_round
     }
+}
+
+fn day24(lines:Vec<String>, second_part:bool) -> i32  {
+    // Horizontal and vertical don't interact.
+    // for each step, check the next path.
+    // Horizontal repeats after 'x'
+    // Vertical repeats after 'y'
+    // Empty when both horizontal and vertical are empty
+
+//    enum Map { Empty = 0, Empty = 1, Wall = 2}
+    let mut left:VecDeque<VecDeque<bool>> = VecDeque::new();  // [row][column]
+    let mut right:VecDeque<VecDeque<bool>> = VecDeque::new(); // [row][column]
+    let mut up:VecDeque<VecDeque<bool>> = VecDeque::new();    // [row][column]
+    let mut down:VecDeque<VecDeque<bool>> = VecDeque::new();  // [row][column]
+
+    for (y, line) in lines.iter().enumerate() {
+        let mut left_row = VecDeque::new();
+        let mut right_row = VecDeque::new();
+        let mut up_row = VecDeque::new();
+        let mut down_row = VecDeque::new();
+        for (x, location) in line.chars().into_iter().enumerate() {
+            let (mut is_right, mut is_left, mut is_up, mut is_down) = (false, false, false, false);
+            let mut ignore = false;
+            match location {
+                '>' => { is_right = true;},
+                '<' => { is_left = true;},
+                '^' => { is_up = true;},
+                'v' => { is_down = true;},
+                '.' => { },
+                 _  => { ignore = true;},
+            }
+            if !ignore {
+                // Push if it's not a '#'.
+                left_row.push_back(is_left); 
+                right_row.push_back(is_right);
+                up_row.push_back(is_up); 
+                down_row.push_back(is_down); 
+            }
+        }
+        left.push_back(left_row);
+        right.push_back(right_row);
+        up.push_back(up_row);
+        down.push_back(down_row);
+    }
+    left.pop_front();
+    left.pop_back();
+    right.pop_front();
+    right.pop_back();
+    up.pop_front();
+    up.pop_back();
+    down.pop_front();
+    down.pop_back();
+
+    fn check_is_empty(left:&VecDeque<VecDeque<bool>>, right:&VecDeque<VecDeque<bool>>, up:&VecDeque<VecDeque<bool>>, down:&VecDeque<VecDeque<bool>>, x:i32, y:i32, time:i32) -> bool
+    {
+        let y_size = right.len() as i32;
+        let x_size = right[0].len()as i32;
+        if x == x_size - 1 && y == y_size {
+            return true;
+        }
+        if x == 0 && y == -1 {
+            return true;
+        }
+        if x < 0 || y < 0 || x >= x_size || y >= y_size {
+            return false;
+        }
+        !(right[y as usize][((x_size + ((x - time) % x_size)) % x_size) as usize] || 
+        left[y as usize][((x_size + ((x + time) % x_size)) % x_size) as usize] || 
+        up[((y_size + ((y + time) % y_size)) % y_size) as usize][x as usize] || 
+        down[((y_size + ((y - time) % y_size)) % y_size) as usize][x as usize])
+    }
+
+    let mut position = (0,-1); // x,y
+    let mut next_locations:VecDeque<((i32,i32),i32)> = VecDeque::new();
+    let mut check_directions = vec![(1,0),(0,1),(-1,0),(0,-1),(0,0)]; // x,y
+                                                                      //
+    fn apply_offset(point:(i32,i32), offset:(i32,i32)) -> (i32,i32) {
+        ((point.0 + offset.0), (point.1 + offset.1))
+    };
+
+    let mut quickest_map:HashMap<(i32,i32),i32> = HashMap::new();
+
+    fn search_depth(quickest_map:&mut HashMap<(i32,i32),i32>, left:&VecDeque<VecDeque<bool>>, right:&VecDeque<VecDeque<bool>>, 
+                    up:&VecDeque<VecDeque<bool>>, down:&VecDeque<VecDeque<bool>>, 
+                    location:(i32, i32), dst:(i32,i32), current_time:i32, time_remaining:i32) -> (bool,i32) {
+        let check_directions = vec![(1,0),(0,1),(0,0),(0,-1),(-1,0)]; // x,y
+                                                                      
+        if let Some(last_distance) = quickest_map.get(&location)
+        {
+//            if current_time - last_distance > 5 { // Max 'revisit' delay.
+//                return (true, current_time);
+//            }
+        } else {
+            quickest_map.insert(location, current_time);
+        }
+                                                                      //
+        if location == dst {
+            return (true, current_time);
+        }
+                                                                      //
+        let mut found = false;
+        let mut found_time = current_time;
+        
+        if time_remaining != 0 {
+            for check in check_directions.iter() {
+                let new_location = apply_offset(location, *check);
+                if check_is_empty(&left, &right, &up, &down, new_location.0, new_location.1, current_time+1) {
+                    if !found {
+                        (found, found_time) = search_depth(quickest_map, left, right, up, down, new_location, dst, current_time+1, time_remaining-1)
+                    }
+                }
+            }
+        }
+        (found, found_time)
+    }
+
+    let max_lookahead = 12; // Fudge factor, not sure what the best look ahead is (appears to give matching results from 7+).
+    let mut first_goal_time = 0;
+    search_depth(&mut quickest_map, &left, &right, &up, &down, (0, -1), (left[0].len() as i32 -1,left.len() as i32 -1), 0, max_lookahead);
+    'outer: for i in 0..10000 {
+        for (location,distance) in quickest_map.clone() {
+            if i == distance {
+                let (found,time) = search_depth(&mut quickest_map, &left, &right, &up, &down, location, (left[0].len() as i32 -1,left.len() as i32 -1), i, max_lookahead);
+                if found {
+                    println!("{} {}", found, time + 1);
+                    first_goal_time = time + 1;
+                    break 'outer;
+                }
+            }
+        }
+    }
+
+    let mut second_goal_time = 0;
+    quickest_map.clear();
+    search_depth(&mut quickest_map, &left, &right, &up, &down, (left[0].len() as i32 -1,left.len() as i32), (0,0), first_goal_time, max_lookahead);
+    'outer: for i in first_goal_time..10000 {
+        for (location,distance) in quickest_map.clone() {
+            if i == distance {
+                let (found,time) = search_depth(&mut quickest_map, &left, &right, &up, &down, location, (0,0), i, 10);
+                if found {
+                    println!("{} {}", found, time + 1);
+                    second_goal_time = time + 1;
+                    break 'outer;
+                }
+            }
+        }
+    }
+
+    let mut third_goal_time = 0;
+    quickest_map.clear();
+    search_depth(&mut quickest_map, &left, &right, &up, &down, (0, -1), (left[0].len() as i32 -1,left.len() as i32 -1), second_goal_time, max_lookahead);
+    'outer: for i in second_goal_time..10000 {
+        for (location,distance) in quickest_map.clone() {
+            if i == distance {
+                let (found,time) = search_depth(&mut quickest_map, &left, &right, &up, &down, location, (left[0].len() as i32 -1,left.len() as i32 -1), i, max_lookahead);
+                if found {
+                    println!("{} {}", found, time + 1);
+                    third_goal_time = time + 1;
+                    break 'outer;
+                }
+            }
+        }
+    }
+    println!("1st: {} 2nd: {} 3rd: {}", first_goal_time, second_goal_time, third_goal_time);
+
+
+    if false { // debug
+        for i in 0..16 {
+            println!("Minute: {}", i);
+            print_blizzard(&left, &right, &up, &down);
+
+            for row_idx in 0..right.len() {
+                right[row_idx].rotate_right(1);
+                left[row_idx].rotate_left(1);
+            }
+
+            up.rotate_left(1);
+            down.rotate_right(1);
+        }
+
+        print_blizzard(&left, &right, &up, &down);
+    }
+
+    fn print_blizzard(left:&VecDeque<VecDeque<bool>>, right:&VecDeque<VecDeque<bool>>, up:&VecDeque<VecDeque<bool>>, down:&VecDeque<VecDeque<bool>>) {
+        for y in 0..left.len() {
+            for x in 0..left[0].len() {
+                let sum = left[y][x] as i32 + right[y][x] as i32 + up[y][x] as i32 + down[y][x] as i32;
+                if sum > 1 { print!("{}", sum); } 
+                else if left[y][x] { print!("<"); } 
+                else if right[y][x] { print!(">"); } 
+                else if up[y][x] { print!("^"); } 
+                else if down[y][x] { print!("v"); } 
+                else { print!("."); } 
+            }
+            println!("");
+        }
+        println!("");
+    }
+
+    if !second_part {first_goal_time} else {third_goal_time}
 }
 
 fn print_points(points:&Vec<(i32,i32)>) {
@@ -1961,6 +2164,7 @@ mod tests {
         expected.insert(21,[  "152", "81075092088442",           "301",  "3349136384441"]);
         expected.insert(22,[ "6032",          "31568",          "5031",          "36540"]);
         expected.insert(23,[  "110",           "3862",            "20",            "913"]);
+        expected.insert(24,[   "18",            "297",            "54",            "856"]);
 
         for (day, expect) in expected {
             for (i, test_mode) in test_order.iter().enumerate() {
