@@ -1327,7 +1327,7 @@ fn day19(lines:Vec<String>, second_part:bool) -> u32  {
     fn find_max_geods(blueprints:&Vec<Vec<u32>>, active_robots:&Vec<u32>, dont_build:&Vec<bool>, resources:&Vec<u32>, time_left:u32, current_max:u32) -> u32 {
    
         #[derive(PartialEq, Clone, Copy)]
-        enum Robot { Ore = 0, Clay = 1, Obsidian = 2, Geode = 3}
+        enum Robot { /*Ore = 0, Clay = 1, Obsidian = 2,*/ Geode = 3}
 
         // Can build the robot if the resources are at lest the requirement for the blueprint
         let can_build_robot = |blueprint, resource| {std::iter::zip(blueprint, resource).fold(true, |s,(b,r)| s && r >= b)};
@@ -1508,7 +1508,7 @@ fn day22(lines:Vec<String>, second_part:bool, sample:bool) -> i32  {
         day22_partb(lines, second_part, sample)
     }
 }
-fn day22_parta(lines:Vec<String>, second_part:bool, sample:bool) -> i32  {
+fn day22_parta(lines:Vec<String>, _second_part:bool, sample:bool) -> i32  {
 
     fn next_step(position:&(i32, i32), heading:&usize, width:i32, sample:bool ) -> ((i32, i32),usize) {
         let offsets_vec = vec![(1,0), ( 0, 1), (-1,0), ( 0,-1)];
@@ -1531,7 +1531,7 @@ fn day22_parta(lines:Vec<String>, second_part:bool, sample:bool) -> i32  {
     let mut points = 0;
     while let Some(line) = iter.next() {
         if line == "" {break;}
-        let mut new_row = line.chars()
+        let new_row = line.chars()
                       .into_iter()
                       .map(|c| match c {' ' => {Map::Void}, 
                                         '.' => {points+=1; Map::Empty},
@@ -1591,7 +1591,7 @@ fn day22_parta(lines:Vec<String>, second_part:bool, sample:bool) -> i32  {
     result
 }
 
-fn day22_partb(lines:Vec<String>, second_part:bool, sample:bool) -> i32  {
+fn day22_partb(lines:Vec<String>, _second_part:bool, _sample:bool) -> i32  {
 
     // Flood fill
     // If leaving a 'panel', update 'dir' and 'normal'
@@ -1615,8 +1615,6 @@ fn day22_partb(lines:Vec<String>, second_part:bool, sample:bool) -> i32  {
     // Calculate the cube width from the input.
     let cube_width = ((points/6) as f32).sqrt() as i32;
 
-    // Get the initial position in the flat image.
-    let grid_position = (rows[0].iter().position(|c| *c == Map::Empty).unwrap() as i32,0);
     let panel_pos = (0,0);
     let grid_dir = (1,0);
 
@@ -1635,27 +1633,28 @@ fn day22_partb(lines:Vec<String>, second_part:bool, sample:bool) -> i32  {
         ((dir.2 * norm.1) - (dir.1 * norm.2), 
          (dir.0 * norm.2) - (dir.2 * norm.0), 
          (dir.1 * norm.0) - (dir.0 * norm.1))
-    };
+    }
 
     // |  i  j  k |
     // | di dj  0 |
     // |  0  0 -1 |
     fn rotate_grid_anti_clock(dir:(i32,i32)) -> (i32,i32) {
         (dir.1, -dir.0)
-    };
+    }
 
     fn apply_grid_offset(point:(i32,i32), offset:(i32,i32)) -> (i32,i32) {
         ((point.0 + offset.0), (point.1 + offset.1))
-    };
+    }
 
     fn apply_offset(point:(i32,i32,i32), offset:(i32,i32,i32)) -> (i32,i32,i32) {
         ((point.0 + offset.0), (point.1 + offset.1), (point.2 + offset.2))
-    };
+    }
 
     fn negate_vector(point:(i32,i32,i32)) -> (i32,i32,i32) {
         (-point.0, -point.1, -point.2)
     }
     
+    // Get the initial position in the flat image.
     let grid_position = (rows[0].iter().position(|c| *c == Map::Empty).unwrap() as i32,0);
 
     // Create the cube in 3d.  Maintain direction for both the current 3d point and the 2d input
@@ -1664,9 +1663,7 @@ fn day22_partb(lines:Vec<String>, second_part:bool, sample:bool) -> i32  {
     fn build_cube(real_cube: &mut HashMap::<((i32,i32,i32),(i32,i32,i32)),(Map,(i32,i32))>, 
                   grid:&Vec<Vec<Map>>, grid_pos:(i32,i32), panel_pos:(i32,i32), current_grid_dir:(i32,i32), 
                   position:(i32,i32,i32), normal:(i32,i32,i32), current_direction:(i32,i32,i32), width:i32) {
-        if let Some(value) = real_cube.get(&(normal,position)) {
-            // Found
-        } else {
+        if None == real_cube.get(&(normal,position)) {
             if panel_pos.0 >= 0 && panel_pos.1 >= 0 && panel_pos.1 < width as i32 && panel_pos.0 < width as i32 
             {
                 if grid[grid_pos.1 as usize][grid_pos.0 as usize] == Map::Void {
@@ -1675,7 +1672,7 @@ fn day22_partb(lines:Vec<String>, second_part:bool, sample:bool) -> i32  {
                 real_cube.insert((normal,position),(grid[grid_pos.1 as usize][grid_pos.0 as usize],(grid_pos.0,grid_pos.1)));
                 let mut new_grid_dir = current_grid_dir;
                 let mut new_direction = current_direction;
-                for i in 0..4 {
+                for _ in 0..4 {
                     // Check each direction.
                     let new_position = apply_offset(position, new_direction);
                     let new_grid_pos = apply_grid_offset(grid_pos, new_grid_dir);
@@ -1708,11 +1705,7 @@ fn day22_partb(lines:Vec<String>, second_part:bool, sample:bool) -> i32  {
     // Movement
     let movements = iter.next().unwrap();
 
-    // Get the initial position.
-    let grid_position = (rows[0].iter().position(|c| *c == Map::Empty).unwrap() as i32,0);
-
     position          = (0,0,0);
-    let mut previous_grid     = grid_position;
 
     // Answer was too high (36541).
     let mut movements_iter = movements.chars().peekable();
@@ -1725,11 +1718,9 @@ fn day22_partb(lines:Vec<String>, second_part:bool, sample:bool) -> i32  {
         }
 
         for _ in 0..distance.iter().collect::<String>().parse::<i32>().unwrap() {
-            let mut new_position        = position;
             let mut new_normal          = normal;
             let mut new_direction = current_direction;
-
-            new_position = apply_offset(position, new_direction);
+            let mut new_position = apply_offset(position, new_direction);
 
             // Check if we need to move to a new surface.
             if new_position.0 < 0 || new_position.1 < 0 || new_position.2 < 0 || 
@@ -1739,7 +1730,7 @@ fn day22_partb(lines:Vec<String>, second_part:bool, sample:bool) -> i32  {
                 new_position = position; // reset the position.
             }
 
-            if let Some((value,grid_pos)) = real_cube.get(&(new_normal,new_position)) {
+            if let Some((value,_grid_pos)) = real_cube.get(&(new_normal,new_position)) {
                 if *value != Map::Wall {
                     current_direction = new_direction;
                     normal = new_normal;
@@ -1763,12 +1754,12 @@ fn day22_partb(lines:Vec<String>, second_part:bool, sample:bool) -> i32  {
     // Not keeping track of the 2d heading, so move in 3d.  
     // If forward falls of panel, then go in reverse.
     let mut heading_value = 0;
-    if let Some((value,grid_pos)) = real_cube.get(&(normal,position)) {
+    if let Some((_value,grid_pos)) = real_cube.get(&(normal,position)) {
         let mut grid_direction = (0,0);
-        if let Some((value,next_grid_pos)) = real_cube.get(&(normal,apply_offset(position, current_direction))) {
+        if let Some((_,next_grid_pos)) = real_cube.get(&(normal,apply_offset(position, current_direction))) {
             grid_direction.0 = next_grid_pos.0 - grid_pos.0;
             grid_direction.1 = next_grid_pos.1 - grid_pos.1;
-        } else if let Some((value,next_grid_pos)) = real_cube.get(&(normal,apply_offset(position, negate_vector(current_direction)))) {
+        } else if let Some((_,next_grid_pos)) = real_cube.get(&(normal,apply_offset(position, negate_vector(current_direction)))) {
             grid_direction.0 = grid_pos.0 - next_grid_pos.0;
             grid_direction.1 = grid_pos.1 - next_grid_pos.1;
         }
@@ -1781,7 +1772,7 @@ fn day22_partb(lines:Vec<String>, second_part:bool, sample:bool) -> i32  {
 
     }
 
-    if let Some((value,grid_pos)) = real_cube.get(&(normal,position)) {
+    if let Some((_,grid_pos)) = real_cube.get(&(normal,position)) {
         (1000 * (grid_pos.1+1)) + (4 * (grid_pos.0+1)) + heading_value
     } else {
         0
@@ -1814,7 +1805,7 @@ fn day23(lines:Vec<String>, second_part:bool) -> i32  {
 
         fn apply_offset(point:(i32,i32), offset:(i32,i32)) -> (i32,i32) {
             ((point.0 + offset.0), (point.1 + offset.1))
-        };
+        }
 
         let mut proposed_new_elves:Vec<(i32, i32)> = Vec::new();
 
@@ -1834,7 +1825,7 @@ fn day23(lines:Vec<String>, second_part:bool) -> i32  {
             }
 
             if !no_other_elves {
-                for i in 0..move_directions.len() {
+                for _ in 0..move_directions.len() {
                     let look_dir = elf_move_direction.next().unwrap();
                     let mut other_elves = false;
                     for j in -1..=1 {
@@ -1879,7 +1870,7 @@ fn day23(lines:Vec<String>, second_part:bool) -> i32  {
 
         elves = new_elves;
 
-        let next_dir = move_direction_iter.next().unwrap(); 
+        move_direction_iter.next().unwrap(); 
         if 0 == proposed_locations.len() {
             final_round = round + 1 as i32;
             break;
@@ -1917,12 +1908,12 @@ fn day24(lines:Vec<String>, second_part:bool) -> i32  {
     let mut up:VecDeque<VecDeque<bool>> = VecDeque::new();    // [row][column]
     let mut down:VecDeque<VecDeque<bool>> = VecDeque::new();  // [row][column]
 
-    for (y, line) in lines.iter().enumerate() {
+    for (_, line) in lines.iter().enumerate() {
         let mut left_row = VecDeque::new();
         let mut right_row = VecDeque::new();
         let mut up_row = VecDeque::new();
         let mut down_row = VecDeque::new();
-        for (x, location) in line.chars().into_iter().enumerate() {
+        for (_, location) in line.chars().into_iter().enumerate() {
             let (mut is_right, mut is_left, mut is_up, mut is_down) = (false, false, false, false);
             let mut ignore = false;
             match location {
@@ -1974,13 +1965,9 @@ fn day24(lines:Vec<String>, second_part:bool) -> i32  {
         down[((y_size + ((y - time) % y_size)) % y_size) as usize][x as usize])
     }
 
-    let mut position = (0,-1); // x,y
-    let mut next_locations:VecDeque<((i32,i32),i32)> = VecDeque::new();
-    let mut check_directions = vec![(1,0),(0,1),(-1,0),(0,-1),(0,0)]; // x,y
-                                                                      //
     fn apply_offset(point:(i32,i32), offset:(i32,i32)) -> (i32,i32) {
         ((point.0 + offset.0), (point.1 + offset.1))
-    };
+    }
 
     let mut quickest_map:HashMap<(i32,i32),i32> = HashMap::new();
 
@@ -1989,19 +1976,16 @@ fn day24(lines:Vec<String>, second_part:bool) -> i32  {
                     location:(i32, i32), dst:(i32,i32), current_time:i32, time_remaining:i32) -> (bool,i32) {
         let check_directions = vec![(1,0),(0,1),(0,0),(0,-1),(-1,0)]; // x,y
                                                                       
-        if let Some(last_distance) = quickest_map.get(&location)
+        if let Some(_last_distance) = quickest_map.get(&location)
         {
-//            if current_time - last_distance > 5 { // Max 'revisit' delay.
-//                return (true, current_time);
-//            }
         } else {
             quickest_map.insert(location, current_time);
         }
-                                                                      //
+
         if location == dst {
             return (true, current_time);
         }
-                                                                      //
+
         let mut found = false;
         let mut found_time = current_time;
         
