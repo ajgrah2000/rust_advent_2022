@@ -61,6 +61,7 @@ fn call_day_func (day_number:u8, second_part:bool, sample:bool) -> String {
            22 => {format!("{}", day22(lines, second_part, sample))},
            23 => {format!("{}", day23(lines, second_part))},
            24 => {format!("{}", day24(lines, second_part))},
+           25 => {day25(lines, second_part)},
             _ => {format!("Unsupported day {}", day_number)}
     }
 }
@@ -2088,6 +2089,67 @@ fn day24(lines:Vec<String>, second_part:bool) -> i32  {
     if !second_part {first_goal_time} else {third_goal_time}
 }
 
+fn day25(lines:Vec<String>, second_part:bool) -> String  {
+
+    fn snafu_char_to_dec(c:char) -> i64 {
+        match c {
+            '2' => {2},
+            '1' => {1},
+            '0' => {0},
+            '-' => {-1},
+            '=' => {-2},
+            _ => {panic!("Unexpected snafu character {}", c);},
+        }
+    }
+
+    fn snafu_to_dec(line:&String) -> i64 {
+        line.chars().fold(0, |sum,c| sum * 5 + snafu_char_to_dec(c))
+    }
+
+    fn dec_to_snafu(input: i64) -> String {
+        // convert to base 5
+        let mut remainder = input;
+        let current_mod = 5;
+        let mut snafu_digits = Vec::new();
+        while remainder != 0 {
+            snafu_digits.push(remainder % current_mod);
+            remainder = (remainder - (remainder % current_mod))/current_mod;
+        }
+        let mut fix_snafu = vec![0;snafu_digits.len() + 1];
+        for (i, snafu_digit) in snafu_digits.iter().enumerate() {
+            // Loop over each digit, if the digit is too high, add to the adjacent digit and
+            // subtract in current digit.
+            if (fix_snafu[i] + snafu_digit) > 2 {
+                fix_snafu[i] =  (fix_snafu[i] + snafu_digit) - 5;
+                fix_snafu[i+1] =  1;
+            } else {
+                fix_snafu[i] = fix_snafu[i] + snafu_digit;
+            }
+        }
+        fix_snafu.reverse();
+        let mut snafu_string = String::new();
+
+        for snafu_digit in fix_snafu {
+            snafu_string = format!("{}{}", snafu_string, 
+                match snafu_digit {
+                    -2 => {'='},
+                    -1 => {'-'},
+                    0 => {'0'},
+                    1 => {'1'},
+                    2 => {'2'},
+                    _ => {panic!("Invalid digit to convert {}", snafu_digit);}});
+        }
+        snafu_string.trim_start_matches('0').to_string()
+    }
+    assert_eq!("1=11-2", dec_to_snafu(2022)); 
+    assert_eq!("1-0---0", dec_to_snafu(12345)); 
+    assert_eq!("1121-1110-1=0", dec_to_snafu(314159265)); 
+    let snafu_dec = lines.iter().fold(0, |sum,line| sum + snafu_to_dec(line));
+
+    // There is no second part for this puzzle.
+    if !second_part { dec_to_snafu(snafu_dec) } else {"".to_string()}
+}
+
 fn print_points(points:&Vec<(i32,i32)>) {
     let mut min_x = points[0].0;
     let mut max_x = points[0].0;
@@ -2149,7 +2211,11 @@ mod tests {
         expected.insert(22,[ "6032",          "31568",          "5031",          "36540"]);
         expected.insert(23,[  "110",           "3862",            "20",            "913"]);
         expected.insert(24,[   "18",            "297",            "54",            "856"]);
+        expected.insert(25,["2=-1=0","2=1-=02-21===-21=200",      "",            ""]);
+        
 
+
+        
         for (day, expect) in expected {
             for (i, test_mode) in test_order.iter().enumerate() {
                 assert_eq!(super::call_day_func(day, test_mode.0, test_mode.1),  expect[i]);
