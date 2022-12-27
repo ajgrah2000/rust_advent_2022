@@ -874,146 +874,112 @@ fn day16(lines:Vec<String>, second_part:bool) -> u32  {
         }
     }
 
-    let mut shortest_paths:HashMap<(&str,&str),u32>  = HashMap::new();
+    let mut shortest_paths:HashMap<(String,String),u32>  = HashMap::new();
     for src in &unopen_valves {
         for dst in &unopen_valves {
             let distance = shortest(&tunnel_links, &src, &dst);
-            shortest_paths.insert((src, dst), distance);
+            shortest_paths.insert((src.to_string(), dst.to_string()), distance);
         }
     }
 
     let starting_point = "AA".to_string();
     for dst in &unopen_valves {
-        shortest_paths.insert((&starting_point, dst), 
+        shortest_paths.insert((starting_point.to_string(), dst.to_string()), 
                               shortest(&tunnel_links, &starting_point, &dst));
     }
 
-    fn calculate_flow_per_step_closed(rates:&HashMap<String, u32>, closed_valves: &HashSet::<String>) -> u32  {
-        rates.iter().fold(0, |sum, (location, rate)| if closed_valves.contains(*&location) { sum } else { sum + rate})
+    // Visit as many valves as possible.
+    // For each unvisited valve:
+    //     - Move to the valve
+    //     - Open the valve, update the 'final' value based on the time remaining when the valve is
+    //     opened
+    //
+    //     Return the total.
+
+    fn total_flow(rates:&HashMap<String, u32>, tunnel_links: &HashMap<String, Vec::<String>>, 
+                  shortest: &HashMap<(String,String),u32>, 
+                  save_result: &mut Vec::<(u32, HashSet::<String>)>, 
+                  location:String, remaining_valves: &HashSet::<String>, time_remaining:u32, current_total:u32, watermark:u32) -> (u32,HashSet::<String>)  {
+        // If 'watermark' is set to 0, don't save.  Otherwise save any result that's larger than
+        // the mark (to use for subsequent searches).
+        if 0 != watermark && current_total >= watermark {save_result.push((current_total, remaining_valves.clone()));}
+
+        if 0 == time_remaining {
+            return (current_total,remaining_valves.clone());
+        }
+        if remaining_valves.len() == 0 {
+            (current_total, remaining_valves.clone())
+        } else {
+              let remaining_rates = rates.iter().filter(|(k,_d)| remaining_valves.contains(*k)).collect::<Vec<(&String,&u32)>>();
+
+              remaining_rates.iter().fold((0, remaining_valves.clone()),  |max, (d,rate) | {
+                let path = {
+                    let distance = shortest.get(&(location.clone(), d.to_string())).unwrap();
+                    if time_remaining > *distance {
+                        let mut after_remove = remaining_valves.clone();
+                        after_remove.remove(*d);
+                        let new_accumulation = *rate * (time_remaining - distance - 1);
+                        total_flow(rates, tunnel_links, shortest, save_result, d.to_string(),
+                                            &after_remove, time_remaining - distance - 1, current_total + new_accumulation, watermark)
+                    } else {
+                        (current_total, remaining_valves.clone())
+                    }
+                };
+                if max.0 > path.0 {
+                    (max.0, max.1)
+                } else {
+                    path
+                }
+            }
+            )
+        }
     }
 
-    fn check_path_permute(rates:&HashMap<String, u32>, tunnel_links: &HashMap<String, Vec::<String>>, shortest: &HashMap<(&str,&str),u32>, 
-                  my_location:&String, elephant_location:&String, closed_valves: HashSet::<String>,  my_time_to_next_valve: u32, elephant_time_to_next_valve:u32, time_remaining:u32) -> u32  {
-        let mut total_flow = 0;
-        if time_remaining > 0 {
-            let mut current_closed:HashSet::<String>;
-            let my_intended_location = my_location.to_string();
-            let mut my_time_remainaing = my_time_to_next_valve;
-            let elephant_intended_location = elephant_location.to_string();
-            let mut elephant_time_remainaing = elephant_time_to_next_valve;
+    let mut save_result = Vec::new();
+    let max_time = if !second_part {30} else {26};
 
-            if my_time_to_next_valve == 0 || elephant_time_to_next_valve == 0 {
-                current_closed = closed_valves.clone();
-                if my_time_to_next_valve == 0 {
-                    current_closed.remove(&my_intended_location.to_string());
-                }
-                if elephant_time_to_next_valve == 0 {
-                    current_closed.remove(&elephant_intended_location.to_string());
-                }
-            } else {
-                current_closed = closed_valves;
-            }
-            total_flow += calculate_flow_per_step_closed(rates, &current_closed);
+    // Find the initial 'best' result for the given time
+    let flow_result = total_flow(&valve_flow_rates, &tunnel_links, &shortest_paths, &mut save_result,
+                                    starting_point.to_string(), &unopen_valves, max_time, 0, 0);
 
-            if my_time_to_next_valve == 0 || elephant_time_to_next_valve == 0 {
-                // With 2 movements, this is where this algorithm explodes.
-                // Doing a naive approach of permutations of 'me' and 'elephant'
-                // All this code is just trying to do some additional pruning.
-                // There will be a much better way.
+    if second_part {
+        save_result = Vec::new();
+        // Using the 'left over' valves, find the best 'elephant' result (this is the 'minimum'
+        // that the second helper should be able to cover).
+        let elephant_flow_result = total_flow(&valve_flow_rates, &tunnel_links, &shortest_paths, &mut save_result,
+                                              starting_point.to_string(), &flow_result.1, max_time, 0, 0);
 
-                if current_closed.len() > 0 {
-                    let mut valve_pairs = HashSet::<(String,String)>::new();
-                    if my_time_to_next_valve == 0 && elephant_time_to_next_valve == 0 {
-                        //  If both need a new one, set order based on who's closest
-                        let mut elephant_checks = Vec::<String>::new();
-                        for elephant in &current_closed {
-                            if *shortest.get(&(elephant_location, elephant)).unwrap() <= time_remaining {
-                                // Only add 'reachable' valves
-                                elephant_checks.push(elephant.to_string());
-                            }
-                        }
+        // Now re-run to find all results at least as good as the second run.
+        save_result = Vec::new();
+        let _ = total_flow(&valve_flow_rates, &tunnel_links, &shortest_paths, &mut save_result,
+                           starting_point.to_string(), &unopen_valves, max_time, 0, std::cmp::max(1, elephant_flow_result.0));
 
-                        let mut me_checks = Vec::<String>::new();
-                        for me in &current_closed {
-                            if *shortest.get(&(my_location, me)).unwrap() <= time_remaining {
-                                // Only add 'reachable' valves
-                                me_checks.push(me.to_string());
-                            }
-                        }
+        let mut total_max = 0;
+        let mut subset = HashMap::new();
 
-                        for me_pos in &me_checks{
-                            for elephant in &elephant_checks {
-                                if me_pos != elephant {
-                                    let mm = *shortest.get(&(my_location, me_pos)).unwrap();
-                                    let me = *shortest.get(&(my_location, elephant)).unwrap();
-                                    let em = *shortest.get(&(elephant_location, me_pos)).unwrap();
-                                    let ee = *shortest.get(&(elephant_location, elephant)).unwrap();
-                                    if (me <= ee) && (em <= mm) {
-                                        // If it's better to go to each others, then swap (it
-                                        // doesn't matter who switches the valve).
-                                        valve_pairs.insert((elephant.to_string(), me_pos.to_string()));
-                                    }
-                                    else {
-                                        valve_pairs.insert((me_pos.to_string(), elephant.to_string()));
-                                    }
-                                }
-                            }
-                        }
-
-                    } else if my_time_to_next_valve == 0  {
-                        for me in &current_closed {
-                            if *shortest.get(&(my_location, me)).unwrap() <= time_remaining {
-                                valve_pairs.insert((me.to_string(), elephant_intended_location.to_string()));
-                            }
-                        }
-                    } else if elephant_time_to_next_valve == 0 {
-                        for elephant in &current_closed {
-                            if *shortest.get(&(elephant_location, elephant)).unwrap() <= time_remaining {
-                                valve_pairs.insert((my_intended_location.to_string(), elephant.to_string()));
-                            }
-                        }
-                    }
-
-                    if valve_pairs.len() > 0 {
-                        let mut max_path = 0;
-                        for (me, elephant) in valve_pairs {
-                            if my_time_to_next_valve == 0 {
-                                my_time_remainaing = *shortest.get(&(my_location, &me)).unwrap();
-                                my_time_remainaing += 1; // Time to open valve.
-                            }
-
-                            if elephant_time_to_next_valve == 0 {
-                                elephant_time_remainaing = *shortest.get(&(&elephant_location, &elephant)).unwrap();
-                                elephant_time_remainaing += 1; // Time to open valve.
-                            }
-                            max_path = std::cmp::max(max_path, check_path_permute(rates, tunnel_links, shortest, &me, &elephant, current_closed.clone(), std::cmp::max(0,my_time_remainaing as i32 - 1) as u32, std::cmp::max(0,elephant_time_remainaing as i32 - 1) as u32, time_remaining - 1));
-                        }
-                        total_flow += max_path;
-                    } else {
-                            total_flow += check_path_permute(rates, tunnel_links, shortest, &my_intended_location, &elephant_intended_location, current_closed.clone(), std::cmp::max(0,my_time_remainaing as i32 - 1) as u32, std::cmp::max(0,elephant_time_remainaing as i32 - 1) as u32, time_remaining - 1);
-                    }
-                }
-                else
-                {
-                    total_flow += check_path_permute(rates, tunnel_links, shortest, &my_intended_location, &elephant_intended_location, current_closed, std::cmp::max(0,my_time_remainaing as i32 - 1) as u32, std::cmp::max(0,elephant_time_remainaing as i32 - 1) as u32, time_remaining - 1);
-                }
-
-            } else {
-
-                total_flow += check_path_permute(rates, tunnel_links, shortest, &my_intended_location, &elephant_intended_location, current_closed, std::cmp::max(0,my_time_remainaing as i32 - 1) as u32, std::cmp::max(0,elephant_time_remainaing as i32 - 1) as u32, time_remaining - 1);
+        // Get a unique set of unopened valves, picking the 'best' if there are duplicates.
+        // This could be done as part of the 'save'.
+        for (total_for_save, search_set) in &save_result {
+            let mut sorted_set = search_set.iter().cloned().collect::<Vec<String>>();
+            sorted_set.sort(); 
+            let current_size = *subset.entry(sorted_set.clone()).or_insert(total_for_save);
+            if current_size < total_for_save {
+                *subset.get_mut(&sorted_set).unwrap() = total_for_save;
             }
         }
-        total_flow
-    }
 
-    for ((a,b),d) in &shortest_paths {
-        println!("{} {} {}", a, b, d);
-    }
-    if !second_part {
-        // Set the elephant's start time to '99' so it doesn't open any valves for the 'first part'
-        check_path_permute(&valve_flow_rates, &tunnel_links, &shortest_paths, &starting_point, &starting_point, unopen_valves.clone(),  0, 99, 30)
+        for (search_set, total_for_save) in subset {
+            // For each remainder, find the best total.
+            let other_result = total_flow(&valve_flow_rates, &tunnel_links, &shortest_paths, &mut Vec::new(),
+                                         starting_point.to_string(), 
+                                         &search_set.iter().cloned().collect::<HashSet::<String>>(),
+                                         max_time, *total_for_save, 0);
+            total_max = std::cmp::max(total_max, other_result.0);
+        }
+
+        total_max 
     } else {
-        check_path_permute(&valve_flow_rates, &tunnel_links, &shortest_paths, &starting_point, &starting_point, unopen_valves.clone(),  0, 0, 26)
+        flow_result.0
     }
 }
 
@@ -1903,7 +1869,6 @@ fn day24(lines:Vec<String>, second_part:bool) -> i32  {
     // Vertical repeats after 'y'
     // Empty when both horizontal and vertical are empty
 
-//    enum Map { Empty = 0, Empty = 1, Wall = 2}
     let mut left:VecDeque<VecDeque<bool>> = VecDeque::new();  // [row][column]
     let mut right:VecDeque<VecDeque<bool>> = VecDeque::new(); // [row][column]
     let mut up:VecDeque<VecDeque<bool>> = VecDeque::new();    // [row][column]
@@ -2180,51 +2145,33 @@ fn print_points(points:&Vec<(i32,i32)>) {
 
 #[cfg(test)]
 mod tests {
-    #[test]
-    fn test_days() {
-        use std::collections::HashMap;
-
-        // Results are specific to the specific input files stored in the repo.
-
+    fn test_helper(day:u8, expect:Vec<&str>) {
         let test_order = [(false, true), (false, false), (true,true), (true, false)];
-
-        let mut expected = HashMap::new();
-        expected.insert(1, ["24000",          "71934",         "45000",         "211447"]);
-        expected.insert(2, [   "15",          "13268",            "12",          "15508"]);
-        expected.insert(3, [  "157",           "8109",            "70",           "2738"]);
-        expected.insert(4, [    "2",            "507",             "4",            "897"]);
-        expected.insert(5, [  "CMZ",      "TQRFCBSJJ",           "MCD",      "RMHFJNVFP"]);
-        expected.insert(6, [   "11",           "1134",            "26",           "2263"]);
-        expected.insert(7, ["95437",         "919137",      "24933642",        "2877389"]);
-        expected.insert(8, [   "21",           "1798",             "8",         "259308"]);
-        expected.insert(9, [   "13",           "6236",             "1",           "2449"]);
-        expected.insert(11,["10605",          "61503",    "2713310158",    "14081365540"]);
-        expected.insert(12,[   "31",            "440",            "29",            "439"]);
-        expected.insert(13,[   "13",           "6568",           "140",          "19493"]);
-        expected.insert(14,[   "24",            "793",            "93",          "24166"]);
-        expected.insert(15,[   "26",        "5832528",      "56000011", "13360899249595"]);
-        expected.insert(17,[ "3068",           "3127", "1514285714288",  "1542941176480"]);
-        expected.insert(18,[   "64",           "4242",            "58",           "2428"]);
-        expected.insert(19,[   "33",           "1834",          "3472",           "2240"]);
-        expected.insert(20,[    "3",           "3473",    "1623178306",  "7496649006261"]);
-        expected.insert(21,[  "152", "81075092088442",           "301",  "3349136384441"]);
-        expected.insert(22,[ "6032",          "31568",          "5031",          "36540"]);
-        expected.insert(23,[  "110",           "3862",            "20",            "913"]);
-        expected.insert(24,[   "18",            "297",            "54",            "856"]);
-        expected.insert(25,["2=-1=0","2=1-=02-21===-21=200",      "",            ""]);
-        
-
-
-        
-        for (day, expect) in expected {
-            for (i, test_mode) in test_order.iter().enumerate() {
-                assert_eq!(super::call_day_func(day, test_mode.0, test_mode.1),  expect[i]);
-            }
+        for (i, test_mode) in test_order.iter().enumerate() {
+            assert_eq!(super::call_day_func(day, test_mode.0, test_mode.1),  expect[i]);
         }
+    }
 
-        assert_eq!(super::call_day_func(22, false,  true),          "6032");
-        assert_eq!(super::call_day_func(22, false, false),         "31568");
-
+    #[test]
+    fn test_day1() { test_helper(1, vec!["24000",          "71934",         "45000",         "211447"]); }
+    #[test]
+    fn test_day2() { test_helper(2, vec![   "15",          "13268",            "12",          "15508"]); }
+    #[test]
+    fn test_day3() { test_helper(3, vec![  "157",           "8109",            "70",           "2738"]); }
+    #[test]
+    fn test_day4() { test_helper(4, vec![    "2",            "507",             "4",            "897"]); }
+    #[test]
+    fn test_day5() { test_helper(5, vec![  "CMZ",      "TQRFCBSJJ",           "MCD",      "RMHFJNVFP"]); }
+    #[test]
+    fn test_day6() { test_helper(6, vec![   "11",           "1134",            "26",           "2263"]); }
+    #[test]
+    fn test_day7() { test_helper(7, vec!["95437",         "919137",      "24933642",        "2877389"]); }
+    #[test]
+    fn test_day8() { test_helper(8, vec![   "21",           "1798",             "8",         "259308"]); }
+    #[test]
+    fn test_day9() { test_helper(9, vec![   "13",           "6236",             "1",           "2449"]); }
+    #[test]
+    fn test_day10() {
         assert_eq!(super::call_day_func(10, false,  true),          "13140");
         assert_eq!(super::call_day_func(10, false, false),          "11960");
         assert_eq!(super::call_day_func(10,  true,  true),  "\n##..##..##..##..##..##..##..##..##..##..\n\
@@ -2242,10 +2189,34 @@ mod tests {
     }
 
     #[test]
-    fn test_day_16() {
-        assert_eq!(super::call_day_func(16, false,  true),           "1651");
-        assert_eq!(super::call_day_func(16, false, false),           "2359");
-        assert_eq!(super::call_day_func(16,  true,  true),           "1707");
-        // assert_eq!(super::call_day_func(16,  true, false),      "2999"); // With current algorithm take ~45min in release
-    }
+    fn test_day11() { test_helper(11,vec!["10605",          "61503",    "2713310158",    "14081365540"]); }
+    #[test]
+    fn test_day12() { test_helper(12,vec![   "31",            "440",            "29",            "439"]); }
+    #[test]
+    fn test_day13() { test_helper(13,vec![   "13",           "6568",           "140",          "19493"]); }
+    #[test]
+    fn test_day14() { test_helper(14,vec![   "24",            "793",            "93",          "24166"]); }
+    #[test]
+    fn test_day15() { test_helper(15,vec![   "26",        "5832528",      "56000011", "13360899249595"]); }
+    #[test]
+    fn test_day16() { test_helper(16,vec![ "1651",           "2359",          "1707",           "2999"]); }
+    #[test]
+    fn test_day17() { test_helper(17,vec![ "3068",           "3127", "1514285714288",  "1542941176480"]); }
+    #[test]
+    fn test_day18() { test_helper(18,vec![   "64",           "4242",            "58",           "2428"]); }
+    #[test]
+    fn test_day19() { test_helper(19,vec![   "33",           "1834",          "3472",           "2240"]); }
+    #[test]
+    fn test_day20() { test_helper(20,vec![    "3",           "3473",    "1623178306",  "7496649006261"]); }
+    #[test]
+    fn test_day21() { test_helper(21,vec![  "152", "81075092088442",           "301",  "3349136384441"]); }
+    #[test]
+    fn test_day22() { test_helper(22,vec![ "6032",          "31568",          "5031",          "36540"]); }
+    #[test]
+    fn test_day23() { test_helper(23,vec![  "110",           "3862",            "20",            "913"]); }
+    #[test]
+    fn test_day24() { test_helper(24,vec![   "18",            "297",            "54",            "856"]); }
+    #[test]
+    fn test_day25() { test_helper(25,vec!["2=-1=0","2=1-=02-21===-21=200",        "",               ""]); }
+
 }
